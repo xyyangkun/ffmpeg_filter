@@ -15,6 +15,20 @@ else()
     message(STATUS "Debug版本")
 endif()
 
+#add debug operation
+set(ENABLE_ASAN true)
+
+if(ENABLE_ASAN)
+# 以下问内存泄漏检测
+add_compile_options(-g)
+add_compile_options(-fsanitize=address)
+add_compile_options(-fno-omit-frame-pointer)
+add_compile_options(-Wl,--no-undefined)
+#add_compile_options(-O1)
+#添加链接选项, 只能添加一行
+SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address")
+endif()
+
 #设置bin和lib库目录
 set(RELEASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/release)
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
