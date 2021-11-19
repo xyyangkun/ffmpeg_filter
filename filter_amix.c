@@ -50,6 +50,8 @@
 
 #define VOLUME_VAL 0.90
 
+#define DEBUG 
+
 AVFormatContext *output_format_context = NULL;
 AVCodecContext *output_codec_context = NULL;
 
@@ -152,8 +154,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0, AVFi
         return AVERROR_FILTER_NOT_FOUND;
     }
     
-    //snprintf(args, sizeof(args), "inputs=2");
-    snprintf(args, sizeof(args), "inputs=2:dropout_transition=1000,volume=13");
+    snprintf(args, sizeof(args), "inputs=2");
 	
 	err = avfilter_graph_create_filter(&mix_ctx, mix_filter, "amix",
                                        args, NULL, filter_graph);
@@ -562,11 +563,13 @@ static int process_all(){
                     av_log(NULL, AV_LOG_ERROR, "Error while feeding the audio filtergraph\n");
                     goto end;
                 }
-                
+
+#ifdef DEBUG
                 av_log(NULL, AV_LOG_INFO, "add %d samples on input %d (%d Hz, time=%f, ttime=%f)\n",
                        frame->nb_samples, i, input_codec_contexts[i]->sample_rate,
                        (double)frame->nb_samples / input_codec_contexts[i]->sample_rate,
                        (double)(total_samples[i] += frame->nb_samples) / input_codec_contexts[i]->sample_rate);
+#endif
                 
             }
             
@@ -585,7 +588,9 @@ static int process_all(){
                     for(int i = 0 ; i < nb_inputs ; i++){
                         if(av_buffersrc_get_nb_failed_requests(buffer_contexts[i]) > 0){
                             input_to_read[i] = 1;
+#ifdef DEBUG
                             av_log(NULL, AV_LOG_INFO, "Need to read input %d\n", i);
+#endif
                         }
                     }
                     
@@ -593,11 +598,13 @@ static int process_all(){
                 }
                 if (ret < 0)
                     goto end;
-                
+
+#ifdef DEBUG
                 av_log(NULL, AV_LOG_INFO, "remove %d samples from sink (%d Hz, time=%f, ttime=%f)\n",
                        filt_frame->nb_samples, output_codec_context->sample_rate,
                        (double)filt_frame->nb_samples / output_codec_context->sample_rate,
                        (double)(total_out_samples += filt_frame->nb_samples) / output_codec_context->sample_rate);
+#endif
                 
                 //av_log(NULL, AV_LOG_INFO, "Data read from graph\n");
                 ret = encode_audio_frame(filt_frame, output_format_context, output_codec_context, &data_present);

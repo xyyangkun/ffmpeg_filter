@@ -10,6 +10,10 @@
  *       Revision:  none
  *       Compiler:  gcc
  *   https://www.codenong.com/cs106186144/
+ *   保存aac类似h264有个7字节的aac头
+ *   https://blog.csdn.net/andrewgithub/article/details/109589400
+ *   https://blog.csdn.net/esdhhh/article/details/95871036
+ *   https://www.jianshu.com/p/c8488537501b
  *
  *         Author:  yangkun (yk)
  *          Email:  xyyangkun@163.com
