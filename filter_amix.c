@@ -50,7 +50,7 @@
 
 #define VOLUME_VAL 0.90
 
-#define DEBUG 
+//#define DEBUG 
 
 AVFormatContext *output_format_context = NULL;
 AVCodecContext *output_codec_context = NULL;
@@ -220,6 +220,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0, AVFi
     
     char* dump =avfilter_graph_dump(filter_graph, NULL);
     av_log(NULL, AV_LOG_ERROR, "Graph :\n%s\n", dump);
+	av_free(dump);
 	
     *graph = filter_graph;
     *src0   = abuffer0_ctx;
@@ -721,6 +722,15 @@ int main(int argc, const char * argv[])
 	}
     	
 	printf("FINISHED\n");
+
+	avfilter_graph_free(&graph);
+
+    avcodec_close(input_codec_context_0);
+	avcodec_close(input_codec_context_1);
+    avcodec_close(output_codec_context);
+    avformat_close_input(&input_format_context_0);
+    avformat_close_input(&input_format_context_1);
+    avformat_close_input(&output_format_context);
     
     return 0;
 }

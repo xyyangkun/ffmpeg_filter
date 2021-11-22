@@ -186,6 +186,9 @@ void *recv_proc(void *param)
 		//av_packet_unref(&pkt);
 	}
 
+	// ？这句话有用吗？没有这句话，会检测到有内存泄漏
+	av_free_packet(&pkt);
+
 }
 
 static int _out = 0;

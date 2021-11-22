@@ -91,7 +91,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 	AVFilterContext *abuffer0_ctx;
     AVFilter        *abuffer0;
     AVFilterContext *volume_ctx;
-    AVFilter        *mix_filter;
+    AVFilter        *volume_filter;
     AVFilterContext *abuffersink_ctx;
     AVFilter        *abuffersink;
 	
@@ -104,11 +104,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     if (!filter_graph) {
         av_log(NULL, AV_LOG_ERROR, "Unable to create filter graph.\n");
         return AVERROR(ENOMEM);
-    }
-	
-	/****** abuffer 0 ********/
-    
-    /* Create the abuffer filter;
+    } /****** abuffer 0 ********/ /* Create the abuffer filter;
      * it will be used for feeding the data into the graph. */
     abuffer0 = avfilter_get_by_name("abuffer");
     if (!abuffer0) {
@@ -139,16 +135,17 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 
     /****** volume ******* */
     /* Create volume filter. */
-    mix_filter = avfilter_get_by_name("volume");
-    if (!mix_filter) {
+    volume_filter = avfilter_get_by_name("volume");
+    if (!volume_filter) {
         av_log(NULL, AV_LOG_ERROR, "Could not find the mix filter.\n");
         return AVERROR_FILTER_NOT_FOUND;
     }
     
     // snprintf(args, sizeof(args), "volume=0.1");
-    snprintf(args, sizeof(args), "volume=0.1");
+    //snprintf(args, sizeof(args), "volume=0.1");
+    snprintf(args, sizeof(args), "volume=2");
 	
-	err = avfilter_graph_create_filter(&volume_ctx, mix_filter, "volume",
+	err = avfilter_graph_create_filter(&volume_ctx, volume_filter, "volume_sink",
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio amix filter\n");
@@ -156,6 +153,13 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     }
 
 	_volume = volume_ctx;
+
+	{
+		uint8_t *volume_str = NULL;
+		av_opt_get(_volume->priv, "volume", 0, &volume_str);
+		printf("========================>get volume:%s\n", volume_str);
+		av_freep(&volume_str);
+	}
 	
     /* Finally create the abuffersink filter;
      * it will be used to get the filtered data out of the graph. */
@@ -225,32 +229,68 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 // type = 0 视频 1 音频
 typedef void (*rtsp_cb)(void *buf, int len, int time, int type, long param);
 
+// const char *str = "0.1";
+// const char *str = "5";
+// =0 mute
+void set_volume(const char *str){
+	int ret;
+#if 0
+	av_opt_set(_volume->priv, "volume", AV_STRINGIFY("volume=0.1"), 0);
+#else
+	// 通过avfilter_graph_send_command 实现
+	const char *target = "volume_sink";
+	const char *cmd = "volume";
+	const char *arg = str;
+	char *res=NULL;
+	int res_len=0;
+	int flags=0;
+	ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+	if(ret < 0) {
+		printf("graph send comman error!!\n");
+	}
+
+#endif
+}
+
 //https://blog.csdn.net/garefield/article/details/86491448
 //参考动态修改
 //
 int is_start = 0;
 static void sigterm_handler(int sig) {
-	printf("=========>get sig:%d %d\n", sig, SIGUSR1);
+	//printf("=========>get sig:%d %d\n", sig, SIGUSR1);
 
 	static int ch = 0;
 	// 收到这个信号改变音量
 	// SIGUSR1 == 10 要先注册才能使用
 	if(sig == SIGUSR1) {
 	//if(sig == 10) {
+		if(0){
+			uint8_t *volume_str = NULL;
+			av_opt_get(_volume->priv, "volume", 0, &volume_str);
+			printf("========================>before get sigterm volume:%s\n", volume_str);
+			av_freep(&volume_str);
+		}
 
 		//AVDictionary *options_dict = NULL;
 		if(ch == 0){
 			ch = 1;
-			//av_dict_set(&options_dict, "volume", AV_STRINGIFY("volume=0.1"), 0);
-			av_opt_set(_volume->priv, "volume", AV_STRINGIFY("volume=0.1"), 0);
+			const char *str = "0";
+			set_volume(str);
 			//printf("volume = 0.1\n");
 		}else {
 			ch = 0;
-			// av_dict_set(&options_dict, "volume", AV_STRINGIFY("volume=1"), 0);
-			av_opt_set(_volume->priv, "volume", AV_STRINGIFY("volume=5"), 0);
+			const char *str = "2";
+			set_volume(str);
 			//printf("volume = 10\n");
 		}
 		//av_dict_set(&options_dict, "volume", AV_STRINGIFY(VOLUME_VAL), 0);
+		if(0){
+			uint8_t *volume_str = NULL;
+			av_opt_get(_volume->priv, "volume", 0, &volume_str);
+			printf("========================>get sigterm volume:%s\n", volume_str);
+			av_freep(&volume_str);
+		}
+
 
 #if 0
 		printf("debug %d  ==>%p\n", __LINE__, graph);
