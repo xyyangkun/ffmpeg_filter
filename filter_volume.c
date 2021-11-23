@@ -34,7 +34,7 @@
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
-#include <libavfilter/avfiltergraph.h>
+//#include <libavfilter/avfiltergraph.h>
 
 #define INPUT_SAMPLERATE     44100
 #define INPUT_FORMAT         AV_SAMPLE_FMT_S16
@@ -71,15 +71,20 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 {
     AVFilterGraph *filter_graph;
 	AVFilterContext *abuffer0_ctx;
-    AVFilter        *abuffer0;
+    const AVFilter        *abuffer0;
     AVFilterContext *volume_ctx;
-    AVFilter        *mix_filter;
+    const AVFilter        *mix_filter;
     AVFilterContext *abuffersink_ctx;
-    AVFilter        *abuffersink;
+    const AVFilter        *abuffersink;
+
+	static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16, -1 };
+	static const int64_t channel_layouts[] = { AV_CH_LAYOUT_STEREO/*AV_CH_LAYOUT_MONO*/, -1 };
+	static const int sample_rates[] = { 48000, -1 };
 	
 	char args[512];
 	
     int err;
+	int ret;
 	
     /* Create a new filtergraph, which will contain all the filters. */
     filter_graph = avfilter_graph_alloc();
@@ -113,7 +118,28 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
         return err;
     }
-    
+
+#if 0
+	// 设置参数, 可选
+	ret = av_opt_set_int_list(abuffer0_ctx, "sample_fmts", sample_fmts, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set inputput sample format\n");
+		return ret;
+	}
+	ret = av_opt_set_int_list(abuffer0_ctx, "channel_layouts", channel_layouts, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set inputput channel layout\n");
+		return ret;
+	}
+	ret = av_opt_set_int_list(abuffer0_ctx, "sample_rates", sample_rates, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set input sample rate\n");
+		return ret;
+	}
+#endif
 
 
 
@@ -148,6 +174,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return AVERROR(ENOMEM);
     }
 	
+#if 0
     /* Same sample fmts as the output file. */
     err = av_opt_set_int_list(abuffersink_ctx, "sample_fmts",
                               ((int[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE }),
@@ -156,7 +183,30 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     uint8_t ch_layout[64];
     av_get_channel_layout_string(ch_layout, sizeof(ch_layout), 0, OUTPUT_CHANNELS);
     av_opt_set    (abuffersink_ctx, "channel_layout", ch_layout, AV_OPT_SEARCH_CHILDREN);
-    
+#else
+
+	// 设置参数, 可选
+	ret = av_opt_set_int_list(abuffersink_ctx, "sample_fmts", sample_fmts, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set inputput sample format\n");
+		return ret;
+	}
+	ret = av_opt_set_int_list(abuffersink_ctx, "channel_layouts", channel_layouts, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set output channel layout\n");
+		return ret;
+	}
+	ret = av_opt_set_int_list(abuffersink_ctx, "sample_rates", sample_rates, -1,
+			AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set output sample rate\n");
+		return ret;
+	}
+#endif
+
+
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could set options to the abuffersink instance.\n");
         return err;
@@ -188,6 +238,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     
     char* dump =avfilter_graph_dump(filter_graph, NULL);
     av_log(NULL, AV_LOG_ERROR, "Graph :\n%s\n", dump);
+	av_free(dump);
 	
     *graph = filter_graph;
     *src0   = abuffer0_ctx;
@@ -325,8 +376,8 @@ static int open_output_file(const char *filename,
      * Some container formats (like MP4) require global headers to be present
      * Mark the encoder so that it behaves accordingly.
      */
-    if ((*output_format_context)->oformat->flags & AVFMT_GLOBALHEADER)
-        (*output_codec_context)->flags |= CODEC_FLAG_GLOBAL_HEADER;
+    //if ((*output_format_context)->oformat->flags & AVFMT_GLOBALHEADER)
+        //(*output_codec_context)->flags |= CODEC_FLAG_GLOBAL_HEADER;
 	
     /** Open the encoder for the audio stream to use it later. */
     if ((error = avcodec_open2(*output_codec_context, output_codec, NULL)) < 0) {
@@ -397,7 +448,8 @@ static int decode_audio_frame(AVFrame *frame,
                                        data_present, &input_packet)) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not decode frame (error '%s')\n",
                get_error_text(error));
-        av_free_packet(&input_packet);
+        //av_free_packet(&input_packet);
+        av_packet_unref(&input_packet);
         return error;
     }
 	
@@ -407,7 +459,8 @@ static int decode_audio_frame(AVFrame *frame,
      */
     if (*finished && *data_present)
         *finished = 0;
-    av_free_packet(&input_packet);
+    //av_free_packet(&input_packet);
+    av_packet_unref(&input_packet);
     return 0;
 }
 
@@ -430,7 +483,8 @@ static int encode_audio_frame(AVFrame *frame,
                                        frame, data_present)) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not encode frame (error '%s')\n",
                get_error_text(error));
-        av_free_packet(&output_packet);
+        //av_free_packet(&output_packet);
+        av_packet_unref(&output_packet);
         return error;
     }
 	
@@ -439,11 +493,13 @@ static int encode_audio_frame(AVFrame *frame,
         if ((error = av_write_frame(output_format_context, &output_packet)) < 0) {
             av_log(NULL, AV_LOG_ERROR, "Could not write frame (error '%s')\n",
                    get_error_text(error));
-            av_free_packet(&output_packet);
+            // av_free_packet(&output_packet);
+            av_packet_unref(&output_packet);
             return error;
         }
 		
-        av_free_packet(&output_packet);
+        //av_free_packet(&output_packet);
+        av_packet_unref(&output_packet);
     }
 	
     return 0;
@@ -634,8 +690,8 @@ int main(int argc, const char * argv[])
 
     int err;
 	
-	av_register_all();
-	avfilter_register_all();
+	//av_register_all();
+	//avfilter_register_all();
 	   
     char* audio1Path = "audio10.wav";
     

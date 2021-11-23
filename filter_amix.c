@@ -35,7 +35,7 @@
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
-#include <libavfilter/avfiltergraph.h>
+//#include <libavfilter/avfiltergraph.h>
 
 #define INPUT_SAMPLERATE     44100
 #define INPUT_FORMAT         AV_SAMPLE_FMT_S16
@@ -359,8 +359,8 @@ static int open_output_file(const char *filename,
      * Some container formats (like MP4) require global headers to be present
      * Mark the encoder so that it behaves accordingly.
      */
-    if ((*output_format_context)->oformat->flags & AVFMT_GLOBALHEADER)
-        (*output_codec_context)->flags |= CODEC_FLAG_GLOBAL_HEADER;
+    //if ((*output_format_context)->oformat->flags & AVFMT_GLOBALHEADER)
+        //(*output_codec_context)->flags |= CODEC_FLAG_GLOBAL_HEADER;
 	
     /** Open the encoder for the audio stream to use it later. */
     if ((error = avcodec_open2(*output_codec_context, output_codec, NULL)) < 0) {

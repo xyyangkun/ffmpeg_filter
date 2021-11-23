@@ -38,7 +38,11 @@
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
+#if 0
 #include <libavfilter/avfiltergraph.h>
+#else
+
+#endif
 
 #include "libavformat/avformat.h"
 #include "libavutil/mathematics.h"
@@ -141,6 +145,7 @@ void *recv_proc(void *param)
 			break;
 		}
 
+#if 1
 		if(pkt.pts == AV_NOPTS_VALUE) {
 			// write pts
 			AVRational time_base1=ifmt_ctx->streams[videoindex]->time_base;
@@ -181,6 +186,7 @@ void *recv_proc(void *param)
 			cb(pkt.data, pkt.size, (int)pkt.pts, pkt.stream_index, (long )param);
 		}
 
+#endif
 		//释放内存
 		av_free_packet(&pkt);
 		//av_packet_unref(&pkt);
@@ -302,8 +308,8 @@ int deinit_rtsp()
 {
 	is_start = 0;
 	if(recv_id!=0) {
-		recv_id = 0;
 		pthread_join(recv_id, NULL);
+		recv_id = 0;
 	}
 
 	if(ifmt_ctx) {
