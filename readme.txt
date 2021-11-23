@@ -1,5 +1,8 @@
 depdent:
-	sudo apt install libavfilter-dev 
+	sudo apt install libavfilter-dev  libavformat-dev libpostproc-dev libswscale-dev
 
-build:
-	mkdir build;cd build;cmake ..;make
+x86 build:
+	cd build;cmake ..;make
+
+arm cross build:
+	cd build;./cross_build.sh

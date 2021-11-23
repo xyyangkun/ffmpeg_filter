@@ -1,7 +1,8 @@
 #set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
-set(TOOLCHAIN_DIR  "/data/rk356x/buildroot/output/rockchip_rk3568/host")
+#set(TOOLCHAIN_DIR  "/data/rk356x/buildroot/output/rockchip_rk3568/host")
+set(TOOLCHAIN_DIR  "/data/works/rk3568/rk356x-linux-20210809/buildroot/output/rockchip_rk3568/host")
 
 set(SYSROOT_PATH  ${TOOLCHAIN_DIR}/aarch64-buildroot-linux-gnu/sysroot)
 set(CMAKE_SYSROOT "${SYSROOT_PATH}")
