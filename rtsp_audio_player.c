@@ -39,7 +39,7 @@
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
-#include <libavfilter/avfiltergraph.h>
+//#include <libavfilter/avfiltergraph.h>
 
 #include "libavformat/avformat.h"
 #include "libavutil/mathematics.h"
@@ -52,6 +52,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/time.h>
 #include <assert.h>
 
 #define INPUT_SAMPLERATE     48000
@@ -89,11 +90,11 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 {
     AVFilterGraph *filter_graph;
 	AVFilterContext *abuffer0_ctx;
-    AVFilter        *abuffer0;
+    const AVFilter        *abuffer0;
     AVFilterContext *volume_ctx;
-    AVFilter        *volume_filter;
+    const AVFilter        *volume_filter;
     AVFilterContext *abuffersink_ctx;
-    AVFilter        *abuffersink;
+    const AVFilter        *abuffersink;
 	
 	char args[512];
 	
@@ -212,9 +213,12 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Error while configuring graph : %s\n", get_error_text(err));
         return err;
     }
-    
+
+#if 0
     char* dump =avfilter_graph_dump(filter_graph, NULL);
     av_log(NULL, AV_LOG_ERROR, "Graph :\n%s\n", dump);
+	av_free(dump);
+#endif
 	
     *graph = filter_graph;
     *src0   = abuffer0_ctx;
@@ -365,7 +369,6 @@ static void print_frame(const AVFrame *frame)
 void *recv_proc(void *param)
 {
 	int ret;
-	AVPacket pkt;
 	int64_t start_time=0;
 	int64_t pts=0;
 	int64_t dts=0;
@@ -376,6 +379,7 @@ void *recv_proc(void *param)
 	int profile = 0;
 	
 	int sample = 0;
+
 	for (int i = 0; i < ifmt_ctx->nb_streams; ++i)
 	{
 		if (ifmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
@@ -387,7 +391,6 @@ void *recv_proc(void *param)
 			break;
 		}
 	}
-
 	printf("sample=%d channel=%d profile=%d\n", sample, channel, profile);
 
 	// 构造aac 头
@@ -399,6 +402,7 @@ void *recv_proc(void *param)
 	padts[6] = (uint8_t)0xFC;
 
 
+	AVPacket pkt;
     AVFrame *frame = av_frame_alloc();
     AVFrame *filt_frame = av_frame_alloc();
 
@@ -409,6 +413,14 @@ void *recv_proc(void *param)
 			break;
 		}
 
+		// 等待filter 初始化完成
+		if(src0 == NULL){
+			av_packet_unref(&pkt);
+			continue;
+		}
+
+		// 暂时不处理视频
+#if 0
 		if(pkt.pts == AV_NOPTS_VALUE) {
 			// write pts
 			AVRational time_base1=ifmt_ctx->streams[videoindex]->time_base;
@@ -430,6 +442,7 @@ void *recv_proc(void *param)
 
 			frame_index++;
         }
+#endif
 		//printf("recv frame index:%d\n", frame_index);
 		//printf("len:%d index:%d\n", pkt.size, pkt.stream_index);
 #if 0
@@ -450,7 +463,7 @@ void *recv_proc(void *param)
 		}
 
 
-		if(src0 == NULL)continue;
+		
 		// 解码音频
 		if(pkt.stream_index == audioindex) {
 			ret = avcodec_send_packet(dec_ctx, &pkt);
@@ -470,8 +483,8 @@ void *recv_proc(void *param)
 
 				if (ret >= 0) {
 					/* push the audio data from decoded frame into the filtergraph */
-					//ret = av_buffersrc_add_frame_flags(src0, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
-					ret = av_buffersrc_write_frame(src0, frame);
+					ret = av_buffersrc_add_frame_flags(src0, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
+					//ret = av_buffersrc_write_frame(src0, frame);
 					if (ret < 0) {
 						av_log(NULL, AV_LOG_ERROR, "Error while feeding the audio filtergraph\n");
 						break;
@@ -484,7 +497,7 @@ void *recv_proc(void *param)
 							break;
 						if (ret < 0)
 							goto end;
-						print_frame(filt_frame);
+						//print_frame(filt_frame);
 						//printf("filter_frame size:%d\n", filt_frame->pkt_size);
 						av_frame_unref(filt_frame);
 					}
@@ -494,11 +507,14 @@ void *recv_proc(void *param)
 		}
 
 		//释放内存
-		av_free_packet(&pkt);
-		//av_packet_unref(&pkt);
+		//av_free_packet(&pkt);
+		av_packet_unref(&pkt);
 	}
 
 end:
+	//av_free_packet(&pkt);
+	av_frame_free(&frame);
+	av_frame_free(&filt_frame);
 return NULL;
 
 }
@@ -546,6 +562,7 @@ int init_rtsp()
 #if 1
 	av_dict_set(&options, "rtsp_transport", "tcp", 0);
 	av_dict_set(&options, "stimeout", "1000000", 0); //没有用
+	av_dict_set(&options, "max_delay", "5000000", 0); //设置最大延迟时间
 
 	ifmt_ctx = avformat_alloc_context();
 
@@ -572,6 +589,9 @@ int init_rtsp()
 		printf( "Failed to retrieve input stream information");
 		goto end;
 	}
+
+	// 老的代码
+#if 0
 	for(int i=0; i<ifmt_ctx->nb_streams; i++)
 		if(ifmt_ctx->streams[i]->codec->codec_type==AVMEDIA_TYPE_VIDEO){
 			videoindex=i;
@@ -583,6 +603,7 @@ int init_rtsp()
 			audioindex=i;
 			break;
 		}
+#endif
 
 	printf("will demp format:\n");
 	// 打印流媒体信息
@@ -636,17 +657,22 @@ end:
 
 int deinit_rtsp()
 {
+
+	printf("=======================>%d\n", __LINE__);
 	is_start = 0;
 	if(recv_id!=0) {
-		recv_id = 0;
 		pthread_join(recv_id, NULL);
+		recv_id = 0;
 	}
+
+	printf("=======================>%d\n", __LINE__);
 
 	if(ifmt_ctx) {
 		avformat_close_input(&ifmt_ctx);
-		//avformat_free_context(ifmt_ctx);
+		avformat_free_context(ifmt_ctx);
 		ifmt_ctx = NULL;
 	}
+	printf("=======================>%d\n", __LINE__);
 
 	if(out_file.video){
 		fclose(out_file.video);
@@ -670,8 +696,8 @@ int main(int argc, const char * argv[])
 
     int err;
 	
-	av_register_all();
-	avfilter_register_all();
+	//av_register_all();
+	//avfilter_register_all();
 
 	//show_banner();
 	unsigned version = avcodec_version();
@@ -697,6 +723,15 @@ int main(int argc, const char * argv[])
 	}
 
 	deinit_rtsp();
+
+	printf("========> FINISHED\n");
+
+	avcodec_close(dec_ctx);;
+	avcodec_free_context(&dec_ctx);
+
+	avfilter_graph_free(&graph);
+
+    
 
 	return 0;
 }
