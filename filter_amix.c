@@ -75,13 +75,13 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0, AVFi
 {
     AVFilterGraph *filter_graph;
     AVFilterContext *abuffer1_ctx;
-    AVFilter        *abuffer1;
+    const AVFilter        *abuffer1;
 	AVFilterContext *abuffer0_ctx;
-    AVFilter        *abuffer0;
+    const AVFilter        *abuffer0;
     AVFilterContext *mix_ctx;
-    AVFilter        *mix_filter;
+    const AVFilter        *mix_filter;
     AVFilterContext *abuffersink_ctx;
-    AVFilter        *abuffersink;
+    const AVFilter        *abuffersink;
 	
 	char args[512];
 	
@@ -111,6 +111,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0, AVFi
 			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
              input_codec_context_0->sample_rate,
              av_get_sample_fmt_name(input_codec_context_0->sample_fmt), input_codec_context_0->channel_layout);
+    av_log(NULL, AV_LOG_INFO, "src0 input format:%s", args);
 	
 	
 	err = avfilter_graph_create_filter(&abuffer0_ctx, abuffer0, "src0",
@@ -137,6 +138,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0, AVFi
 			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
              input_codec_context_1->sample_rate,
              av_get_sample_fmt_name(input_codec_context_1->sample_fmt), input_codec_context_1->channel_layout);
+    av_log(NULL, AV_LOG_INFO, "src0 input format:%s", args);
 	
 	
 	err = avfilter_graph_create_filter(&abuffer1_ctx, abuffer1, "src1",

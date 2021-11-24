@@ -298,10 +298,7 @@ end:
 	avformat_free_context(ifmt_ctx);
 	avformat_close_input(&ifmt_ctx);
 	ifmt_ctx = NULL;
-
-
 	return -1;
-
 }
 
 int deinit_rtsp()

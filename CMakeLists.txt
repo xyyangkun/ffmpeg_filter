@@ -29,6 +29,10 @@ add_compile_options(-Wl,--no-undefined)
 SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address")
 endif()
 
+# 忽略deprecated-declarations 警告与错误
+add_compile_options(-Wno-deprecated-declarations)
+add_compile_options(-Wno-error=deprecated-declarations)
+
 #设置bin和lib库目录
 set(RELEASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/release)
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -48,10 +52,10 @@ LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 IF(CROSS_COMPILE)
 # 设置默认链接块
-set(LINK_LIB_LIST m pthread avformat avcodec avfilter swresample avutil rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg)
+set(LINK_LIB_LIST m pthread avformat avdevice avcodec avfilter swresample avutil rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg)
 message(STATUS "arm corss compile")
 ELSE()
-set(LINK_LIB_LIST m pthread )
+set(LINK_LIB_LIST m pthread swresample)
 message(STATUS "x86 compile")
 ENDIF(CROSS_COMPILE)
 
@@ -135,6 +139,23 @@ if(AVFORMAT_FOUND)
 else()
 	message(STATUS "not found library:AVFORMAT_LIBRARIES")
 endif()
+
+#查找ffmpeg/libavdevice 是否安装
+IF(CROSS_COMPILE)
+	set(AVDEVICE_INCLUDE_DIR   ${SYSROOT_PATH}/usr/include)
+	set(AVDEVICE_LIBRARIES "-L ${SYSROOT_PATH}/usr/lib -lavdevice")
+	set(AVDEVICE_FOUND 1)
+ELSE()
+	find_package(AVDEVICE QUIET)
+ENDIF(CROSS_COMPILE)
+if(AVDEVICE_FOUND)
+	include_directories(${AVDEVICE_INCLUDE_DIR})
+	list(APPEND  LINK_LIB_LIST ${AVDEVICE_LIBRARIES})
+	message(STATUS "found library:${AVDEVICE_LIBRARIES}")
+else()
+	message(STATUS "not found library:AVDEVICE_LIBRARIES")
+endif()
+
 
 
 
