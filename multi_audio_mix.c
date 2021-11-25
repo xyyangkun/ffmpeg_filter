@@ -45,6 +45,8 @@
 #include <libavutil/mathematics.h>
 #include <libavutil/time.h>
 
+#include "libavdevice/avdevice.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -132,7 +134,7 @@ AVCodecContext *output_codec_context = NULL;
 AVFilterGraph *graph;
 AVFilterContext *src0, *src1, *src2, *sink;
 
-static int init_fifo(AVAudioFifo **fifo, AVCodecContext *output_codec_context)
+static int init_fifo(AVAudioFifo **fifo)
 {
     /* Create the FIFO buffer based on the specified output sample format. */
     //if (!(*fifo = av_audio_fifo_alloc(output_codec_context->sample_fmt,
@@ -180,6 +182,16 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     const AVFilter        *mix_filter;
     AVFilterContext *abuffersink_ctx;
     const AVFilter        *abuffersink;
+
+    AVFilterContext *volume2_ctx;
+    const AVFilter        *volume2;
+    AVFilterContext *volume1_ctx;
+    const AVFilter        *volume1;
+    AVFilterContext *volume0_ctx;
+    const AVFilter        *volume0;
+    AVFilterContext *volume_sink_ctx;
+    const AVFilter        *volume_sink;
+
 	
 	char args[512];
 
@@ -240,6 +252,24 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return err;
     }
 
+    /****** volume src 0 ******* */
+    /* Create volume filter. */
+    volume0 = avfilter_get_by_name("volume");
+    if (!volume0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=0.1");
+	
+	err = avfilter_graph_create_filter(&volume0_ctx, volume0, "volume0",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio amix filter\n");
+        return err;
+    }
+
+
     
 	/****** abuffer 1 ******* */
 	
@@ -274,6 +304,25 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
         return err;
     }
+
+    /****** volume src 1 ******* */
+    /* Create volume filter. */
+    volume1 = avfilter_get_by_name("volume");
+    if (!volume0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=1");
+	
+	err = avfilter_graph_create_filter(&volume1_ctx, volume1, "volume1",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
+        return err;
+    }
+
+
 	
 
 	/****** abuffer 2 ******* */
@@ -310,6 +359,23 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
         return err;
     }
+
+    /****** volume src 2 ******* */
+    /* Create volume filter. */
+    volume2 = avfilter_get_by_name("volume");
+    if (!volume0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=1");
+	
+	err = avfilter_graph_create_filter(&volume2_ctx, volume2, "volume2",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
+        return err;
+    }
 	
     /****** amix ******* */
     /* Create mix filter. */
@@ -325,6 +391,23 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio amix filter\n");
+        return err;
+    }
+
+	/****** volume sink ******* */
+    /* Create volume filter. */
+    volume_sink = avfilter_get_by_name("volume");
+    if (!volume0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=0.1");
+	
+	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume_sink",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
         return err;
     }
 	
@@ -361,15 +444,22 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Could not initialize the abuffersink instance.\n");
         return err;
     }
-    
-    /* Connect the filters; */
-	err = avfilter_link(abuffer0_ctx, 0, mix_ctx, 0);
+
+	err = avfilter_link(abuffer0_ctx, 0, volume0_ctx, 0);
+	if(err>=0)
+		err = avfilter_link(volume0_ctx, 0, mix_ctx, 0);
 	if (err >= 0)
-        err = avfilter_link(abuffer1_ctx, 0, mix_ctx, 1);
+		err = avfilter_link(abuffer1_ctx, 0, volume1_ctx, 0);
+	if(err>=0)
+        err = avfilter_link(volume1_ctx, 0, mix_ctx, 1);
 	if (err >= 0)
-        err = avfilter_link(abuffer2_ctx, 0, mix_ctx, 2);
+		err = avfilter_link(abuffer2_ctx, 0, volume2_ctx, 0);
+	if(err>=0)
+        err = avfilter_link(volume2_ctx, 0, mix_ctx, 2);
 	if (err >= 0)
-        err = avfilter_link(mix_ctx, 0, abuffersink_ctx, 0);
+        err = avfilter_link(mix_ctx, 0, volume_sink_ctx, 0);
+	if (err >= 0)
+        err = avfilter_link(volume_sink_ctx, 0, abuffersink_ctx, 0);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Error connecting filters\n");
         return err;
@@ -979,13 +1069,13 @@ int init_rtsp()
 		}
 	}
 
-    if (init_fifo(&fifo1, ifmt_ctx1))
+    if (init_fifo(&fifo1))
 	{
 		fprintf(stderr, "ERROR TO create fifo1\n");
 		exit(1);
 	}
 
-    if (init_fifo(&fifo2, ifmt_ctx2))
+    if (init_fifo(&fifo2))
 	{
 		fprintf(stderr, "ERROR TO create fifo2\n");
 		exit(1);
@@ -1126,7 +1216,8 @@ void *usb_recv_proc(void *param)
 			break;
 		}
 
-		//av_log(NULL, AV_LOG_DEBUG, "pkt size:%d\n", pkt.size);
+		//av_log(NULL, AV_LOG_DEBUG, "packet pkt size:%d\n", pkt.size);
+		//printf("packet pkt size:%d\n", pkt.size);
 		//cb(pkt.data, pkt.size, 0, 1, param);
 		if(src2!= NULL && src1!= NULL && src0 != NULL)
 		{
@@ -1153,6 +1244,8 @@ void *usb_recv_proc(void *param)
 					int frame_size = frame->nb_samples;
 					usb_frame_size = frame->nb_samples;
 					//printf("===> usb frame_size:%d\n", frame_size);
+					//printf("pkt_size=%d\n", frame->pkt_size);
+				
 					assert(fifo3);
 					assert(frame_size > 0);
 				pthread_mutex_lock(&counter_mutex3);
