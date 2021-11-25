@@ -680,7 +680,8 @@ int main(int argc, const char * argv[])
 	av_register_all();
 	avfilter_register_all();
 	   
-    char* audio1Path = "audio10.wav";
+    //char* audio1Path = "audio10.wav";
+    char* audio1Path = "TouchTheSky.aac";
     
 	if (open_input_file(audio1Path, &input_format_context_0, &input_codec_context_0) < 0){
         av_log(NULL, AV_LOG_ERROR, "Error while opening file 1\n");

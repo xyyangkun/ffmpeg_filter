@@ -392,7 +392,7 @@ void *recv_proc(void *param)
 			if ((error = av_frame_get_buffer(frame, 0)) < 0) {
 				fprintf(stderr, "Could not allocate output frame samples (error '%s')\n",
 						av_err2str(error));
-				av_frame_free(frame);
+				av_frame_free(&frame);
 				return error;
 			}
 

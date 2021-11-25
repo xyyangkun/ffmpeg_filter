@@ -82,6 +82,7 @@ static void sigterm_handler(int sig) {
 }
 
 static AVFormatContext *ifmt_ctx = NULL;
+static AVCodecContext *dec_ctx;
 static int videoindex;
 static int audioindex;
 pthread_t recv_id;
@@ -334,7 +335,9 @@ void *recv_proc(void *param)
 			break;
 		}
 
+
 		if(pkt.stream_index==audioindex){
+
 			// 因为声卡出来的直接是pcm数据，所以直接写文件
 			if ((ret = av_write_frame(output_format_context, &pkt)) < 0) {
 				av_log(NULL, AV_LOG_ERROR, "Could not write frame (error '%s')\n",
@@ -447,6 +450,20 @@ int init_audio_capture(const char *in_filename, const char * channel)
 	printf("will demp format:\n");
 	// 打印流媒体信息
 	av_dump_format(ifmt_ctx, 0, in_filename, 0);
+
+	//AVCodecContext *input_codec_context;
+	
+    /** Open the decoder for the audio stream to use it later. */
+    if ((ret = avcodec_open2(ifmt_ctx->streams[0]->codec,
+                               dec, NULL)) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Could not open input codec (error '%s')\n",
+               get_error_text(ret));
+        avformat_close_input(&ifmt_ctx);
+		exit(1);
+    }
+	
+    //input_codec_context = ifmt_ctx->streams[0]->codec;
+	dec_ctx = ifmt_ctx->streams[0]->codec;
 
 
 	is_start = 1;
