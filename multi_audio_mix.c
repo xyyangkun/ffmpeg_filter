@@ -402,7 +402,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return AVERROR_FILTER_NOT_FOUND;
     }
     
-    snprintf(args, sizeof(args), "volume=0.1");
+    snprintf(args, sizeof(args), "volume=1");
 	
 	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume_sink",
                                        args, NULL, filter_graph);
@@ -1221,7 +1221,7 @@ void *usb_recv_proc(void *param)
 		//cb(pkt.data, pkt.size, 0, 1, param);
 		if(src2!= NULL && src1!= NULL && src0 != NULL)
 		{
-#if 1
+#if 0
 			assert(dec_ctx3);
 			ret = avcodec_send_packet(dec_ctx3, &pkt);
 			if (ret < 0) {
@@ -1243,9 +1243,18 @@ void *usb_recv_proc(void *param)
 
 					int frame_size = frame->nb_samples;
 					usb_frame_size = frame->nb_samples;
-					//printf("===> usb frame_size:%d\n", frame_size);
 					//printf("pkt_size=%d\n", frame->pkt_size);
+					//printf("af->sample_size=%d\n", fifo3->sample_size);
 				
+					/*
+					printf("AV_CH_LAYOUT_STEREO = %d %d\n", 
+							av_get_default_channel_layout(AV_CH_LAYOUT_STEREO) ,frame->channel_layout);
+					assert(av_get_default_channel_layout(AV_CH_LAYOUT_STEREO) == frame->channel_layout);
+					*/
+					//assert(AV_SAMPLE_FMT_S16 ==  frame->format);
+					//assert(16000 == frame->sample_rate );
+					//assert(0 == memcmp(frame->data[0], pkt.data, 512)); data[0] //存储下所有数据
+					//assert(0 == memcmp(frame->data[1], pkt.data+256, 256));
 					assert(fifo3);
 					assert(frame_size > 0);
 				pthread_mutex_lock(&counter_mutex3);
@@ -1263,12 +1272,14 @@ void *usb_recv_proc(void *param)
 
 
 
-#if 0
+#if 1
+			// 可以直接从package包中获取数据，然后生成AVFrame 包，将数据放入AVFrame包中
+			int pkt_size = pkt.size;
 			AVFrame *frame;
 			frame = av_frame_alloc();
-			frame_size = pkt.size;
 
-			frame->nb_samples     = frame_size;
+			frame->nb_samples     = pkt_size/2/usb_audio_channels;
+			//frame->channel_layout = av_get_default_channel_layout(AV_CH_LAYOUT_STEREO);
 			frame->channel_layout = AV_CH_LAYOUT_STEREO;
 			frame->format         = AV_SAMPLE_FMT_S16;
 			frame->sample_rate    = 16000;
@@ -1279,13 +1290,23 @@ void *usb_recv_proc(void *param)
 				av_frame_free(&frame);
 				return ret;
 			}
+			av_frame_make_writable (frame);
+			av_frame_set_pkt_size(frame, pkt_size);
+
 
 			int frame_size = frame->nb_samples;
 			//printf("usb ====> frame_size:%d\n", frame_size);
+			//printf("usb ====> nb_samples:%d\n", frame->nb_samples);
+			//printf("usb ====>  pkt_size:%d %d\n", frame->pkt_size, pkt_size);
+			memcpy(frame->data[0], pkt.data, pkt_size);
+
 			assert(fifo3);
-			assert(frame_size > 0);
+			assert(pkt_size> 0);
+			assert(frame->nb_samples> 0);
+
 			pthread_mutex_lock(&counter_mutex3);
-			if(av_audio_fifo_write(fifo3, (void **)frame->data, frame_size) < frame_size)
+			//if(av_audio_fifo_write(fifo3, (void **)frame->data, pkt_size) < pkt_size)
+			if(av_audio_fifo_write(fifo3, (void **)&pkt.data, frame_size) < frame_size)
 			{
 				printf("fifo size:%d\n", av_audio_fifo_size(fifo3));
 				fprintf(stderr, "cound not write data to fifo\n");
@@ -1294,8 +1315,8 @@ void *usb_recv_proc(void *param)
 			pthread_mutex_unlock(&counter_mutex3);
 
 
-			av_frame_unref(frame);
-			//av_frame_free(&frame);
+			//av_frame_unref(frame);
+			av_frame_free(&frame);
 #endif
 		}
 
@@ -1781,7 +1802,7 @@ int main(int argc, const char * argv[])
 
 
 
-#if 0
+#if 1
 	// arm 
 	const char *in_filename = "hw:1";
 	const char * channel = "2";
