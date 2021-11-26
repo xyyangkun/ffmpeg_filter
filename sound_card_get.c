@@ -75,7 +75,14 @@ static sound_card_info _info[4] = {
 };
 
 
-// 尝试使用已知配置打开声卡,返回成功则认为此声卡可用
+/**
+ * @brief  尝试使用已知配置打开声卡,返回成功则认为此声卡可用
+ * @param[in] name 要打开声卡的名字
+ * @param[in] format 打开声卡的采样格式，目前只支持S16_LE
+ * @param[in] SAMPLE 采样率 16000 48000
+ * @param[in] channels 1 单声道， 2 立体声 
+ * @return 0 success, others failure -1 声卡不存在
+ */
 static int _try_card_open(const char *name, snd_pcm_format_t format, unsigned int sample, unsigned int channels)
 {
 	int err;
@@ -134,11 +141,20 @@ static int _try_card_open(const char *name, snd_pcm_format_t format, unsigned in
 		goto end;
 	}
 	fprintf(stdout, "PCM数据格式设置成功.\n");
- 
+
+
+	int extra_sample = sample; 
 	/*设置采样频率，并判断是否设置成功*/
-	if((err=snd_pcm_hw_params_set_rate_near (capture_handle,hw_params,&sample,0))<0) 
+	if((err=snd_pcm_hw_params_set_rate_near (capture_handle,hw_params, &extra_sample,0))<0) 
 	{
 		printf("无法设置采样率(%s)\n",snd_strerror(err));
+		err = -6;
+		goto end;
+	}
+	// 如果不相同说明也是不支持对应的采样率
+	if(extra_sample != sample )
+	{
+		printf("ERRO to SET PARAM in sample=%d get param :%d\n", sample, extra_sample);
 		err = -6;
 		goto end;
 	}
@@ -175,7 +191,37 @@ end:
 	return err;
 }
 
-//通过声卡名字获取声卡采样率，声道数，数据格式信息
+/*
+cat /proc/asound/cards 
+ 0 [HDMI           ]: HDA-Intel - HDA Intel HDMI
+                      HDA Intel HDMI at 0xf7914000 irq 35
+ 1 [PCH            ]: HDA-Intel - HDA Intel PCH
+                      HDA Intel PCH at 0xf7910000 irq 36
+ 2 [NVidia         ]: HDA-Intel - HDA NVidia
+                      HDA NVidia at 0xf7080000 irq 17
+ 3 [C925e          ]: USB-Audio - Logitech Webcam C925e
+                      Logitech Webcam C925e at usb-0000:00:14.0-1.4, high speed
+ */
+
+/**
+ * @brief 查找usb声卡名字
+ * 执行以上命令，查找对应USB-Audio的一行，如果有多个，只找第一个
+ * 找到之后将名字返回
+ * @param[inout] name 找到声卡后将名字返回
+ * @return 0:success, other:failure
+ */
+int found_sound_cars(const char *name)
+{
+
+}
+
+/**
+ * @brief 通过声卡名字,打开声卡，确认是否支持采样率声道数据等信息
+ * @param[in] name 声卡命令
+ * @param[in] info 声卡信息
+ * @return 0:success, other:failure
+ *
+ */
 int get_sound_card_info(const char *name, sound_card_info *info) {
 
 	int buffer_frames = 128;
