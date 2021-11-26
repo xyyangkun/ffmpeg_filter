@@ -59,6 +59,8 @@ int usb_audio_sample_rate = 16000;
 int usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
 static int usb_frame_size = 128;
 
+const int alsa_out_samples = 1024;
+
 // rtsp 回调，连接rtsp成功后，接收server端发来的音视频数据
 // type = 0 视频 1 音频
 typedef void (*rtsp_cb)(void *buf, int len, int time, int type, long param);
@@ -483,6 +485,174 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     *sink  = abuffersink_ctx;
     
     return 0;
+}
+
+/**
+ * Open an output file and the required encoder.
+ * Also set some basic encoder parameters.
+ * Some of these parameters are based on the input file's parameters.
+ * @param      filename              File to be opened
+ * @param      input_codec_context   Codec context of input file
+ * @param[out] output_format_context Format context of output file
+ * @param[out] output_codec_context  Codec context of output file
+ * @return Error code (0 if successful)
+ */
+// ffmpeg -i audio10.wav  -f alsa default
+static int open_output_alsa_file(const char *filename,
+                            //AVCodecContext *input_codec_context,
+                            AVFormatContext **output_format_context,
+                            AVCodecContext **output_codec_context)
+{
+
+#if 1
+  // find output format for ALSA device
+    AVOutputFormat* fmt = av_guess_format("alsa", NULL, NULL);
+    if (!fmt) {
+        fprintf(stderr, "av_guess_format()\n");
+        exit(1);
+    }
+
+    // allocate empty format context
+    // provides methods for writing output packets
+    AVFormatContext* fmt_ctx = avformat_alloc_context();
+    if (!fmt_ctx) {
+        fprintf(stderr, "avformat_alloc_context()\n");
+        exit(1);
+    }
+
+    // tell format context to use ALSA as ouput device
+    fmt_ctx->oformat = fmt;
+
+    // add stream to format context
+    AVStream* stream = avformat_new_stream(fmt_ctx, NULL);
+    if (!stream) {
+        fprintf(stderr, "avformat_new_stream()\n");
+        exit(1);
+    }
+
+	const int in_channels = 2;
+	const int in_samples = alsa_out_samples;//1024;
+	const int sample_rate = 48000;
+	const int bitrate = 64000;
+
+    // initialize stream codec context
+    // format conetxt uses codec context when writing packets
+    AVCodecContext* codec_ctx = stream->codec;
+    assert(codec_ctx);
+    //codec_ctx->codec_id = AV_CODEC_ID_PCM_F32LE;
+    codec_ctx->codec_id = AV_CODEC_ID_PCM_S16LE;
+    codec_ctx->codec_type = AVMEDIA_TYPE_AUDIO;
+    // codec_ctx->sample_fmt = AV_SAMPLE_FMT_FLT;
+    codec_ctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    codec_ctx->bit_rate = bitrate;
+    codec_ctx->sample_rate = sample_rate;
+    codec_ctx->channels = in_channels;
+    codec_ctx->channel_layout = AV_CH_FRONT_LEFT | AV_CH_FRONT_RIGHT;
+
+	*output_codec_context = codec_ctx;
+	*output_format_context = fmt_ctx;
+	return 0;
+#else
+    /* Open the output file to write to it. */
+    if ((error = avio_open(&output_io_context, filename,
+                           AVIO_FLAG_WRITE)) < 0) {
+        fprintf(stderr, "Could not open output file '%s' (error '%s')\n",
+                filename, av_err2str(error));
+        return error;
+    }
+
+    /* Create a new format context for the output container format. */
+    if (!(*output_format_context = avformat_alloc_context())) {
+        fprintf(stderr, "Could not allocate output format context\n");
+		assert(1);
+        return AVERROR(ENOMEM);
+    }
+
+    /* Associate the output file (pointer) with the container format context. */
+    //(*output_format_context)->pb = output_io_context;
+
+    /* Guess the desired container format based on the file extension. */
+    if (!((*output_format_context)->oformat = av_guess_format(NULL, filename,
+                                                              NULL))) {
+        fprintf(stderr, "Could not find output file format\n");
+		assert(1);
+        goto cleanup;
+    }
+
+    if (!((*output_format_context)->url = av_strdup(filename))) {
+        fprintf(stderr, "Could not allocate url.\n");
+        error = AVERROR(ENOMEM);
+        goto cleanup;
+    }
+
+    /* Find the encoder to be used by its name. */
+    if (!(output_codec = avcodec_find_encoder(AV_CODEC_ID_AAC))) {
+        fprintf(stderr, "Could not find an AAC encoder.\n");
+        goto cleanup;
+    }
+
+    /* Create a new audio stream in the output file container. */
+    if (!(stream = avformat_new_stream(*output_format_context, NULL))) {
+        fprintf(stderr, "Could not create new stream\n");
+        error = AVERROR(ENOMEM);
+        goto cleanup;
+    }
+
+    avctx = avcodec_alloc_context3(output_codec);
+    if (!avctx) {
+        fprintf(stderr, "Could not allocate an encoding context\n");
+        error = AVERROR(ENOMEM);
+        goto cleanup;
+    }
+
+    /* Set the basic encoder parameters.
+     * The input file's sample rate is used to avoid a sample rate conversion. */
+    avctx->channels       = OUTPUT_CHANNELS;
+    avctx->channel_layout = av_get_default_channel_layout(OUTPUT_CHANNELS);
+    //avctx->sample_rate    = 16000;
+    //avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
+    avctx->sample_rate    = 48000;////input_codec_context->sample_rate;
+    avctx->sample_fmt     = output_codec->sample_fmts[0];
+
+	printf("sample_fmt:%d\n", avctx->sample_fmt);
+
+    /* Allow the use of the experimental AAC encoder. */
+    avctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+
+    /* Set the sample rate for the container. */
+    stream->time_base.den = avctx->sample_rate;
+    stream->time_base.num = 1;
+
+    /* Some container formats (like MP4) require global headers to be present.
+     * Mark the encoder so that it behaves accordingly. */
+    if ((*output_format_context)->oformat->flags & AVFMT_GLOBALHEADER)
+        avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    /* Open the encoder for the audio stream to use it later. */
+    if ((error = avcodec_open2(avctx, output_codec, NULL)) < 0) {
+        fprintf(stderr, "Could not open output codec (error '%s')\n",
+                av_err2str(error));
+        goto cleanup;
+    }
+
+    error = avcodec_parameters_from_context(stream->codecpar, avctx);
+    if (error < 0) {
+        fprintf(stderr, "Could not initialize stream parameters\n");
+        goto cleanup;
+    }
+
+    /* Save the encoder context for easier access later. */
+    *output_codec_context = avctx;
+
+    return 0;
+
+cleanup:
+    avcodec_free_context(&avctx);
+    avio_closep(&(*output_format_context)->pb);
+    avformat_free_context(*output_format_context);
+    *output_format_context = NULL;
+    return error < 0 ? error : AVERROR_EXIT;
+#endif
 }
 
 /**
@@ -1738,12 +1908,35 @@ again:
 #endif
 #endif
 
+#if 0
 				//av_log(NULL, AV_LOG_INFO, "Data read from graph\n");
 				ret = encode_audio_frame(filt_frame, output_format_context, output_codec_context, &data_present);
 				if (ret < 0) {
 					printf("=============>error :%d\n", __LINE__);
 					goto end;
 				}
+#else
+				// 写alsa程序
+				/*
+				printf("size:filt_frame:%d\n", filt_frame->pkt_size);
+				printf("size:nb_samples:%d\n", filt_frame->nb_samples);
+				assert(48000 == filt_frame->sample_rate);
+				assert(AV_SAMPLE_FMT_S16 == filt_frame->format);
+				assert(AV_CH_LAYOUT_STEREO == filt_frame->channel_layout);
+				*/
+
+				AVPacket packet;
+				av_new_packet(&packet, alsa_out_samples*2*2);
+				//assert(packet.size == 1024*2*2);
+
+				memcpy(packet.data, filt_frame->data[0], packet.size);
+				if (av_write_frame(output_format_context, &packet) < 0) {
+					fprintf(stderr, "av_write_frame()\n");
+					exit(1);
+				}
+
+				av_free_packet(&packet);
+#endif
 
 				av_frame_unref(filt_frame);
 			}
@@ -1833,16 +2026,18 @@ int main(int argc, const char * argv[])
     err = init_filter_graph(&graph, &src0, &src1, &src2, &sink);
 	printf("Init err = %d\n", err);
 
-	char* outputFile = "output.wav";
-    remove(outputFile);
+	//char* outputFile = "output.wav";
+    //remove(outputFile);
+	char* outputFile = "alsa";
     
 	av_log(NULL, AV_LOG_INFO, "Output file : %s\n", outputFile);
 
 	printf("====================================================>%d\n",__LINE__);
 	
 	// err = open_output_file(outputFile, input_codec_context_0, &output_format_context, &output_codec_context);
-	err = open_output_file(outputFile, &output_format_context, &output_codec_context);
+	err = open_output_alsa_file(outputFile, &output_format_context, &output_codec_context);
 	printf("open output file err : %d\n", err);
+	assert(output_format_context);
 	av_dump_format(output_format_context, 0, outputFile, 1);
 	
 	if(write_output_file_header(output_format_context) < 0){
