@@ -210,9 +210,43 @@ cat /proc/asound/cards
  * @param[inout] name 找到声卡后将名字返回
  * @return 0:success, other:failure
  */
-int found_sound_cars(const char *name)
+int found_sound_card(const char *name)
 {
+	int buf_size = 100;
+	char buf[buf_size+1];
+	int ret = -1;
+	const char *str = "USB-Audio";
+	FILE* fp = fopen("/proc/asound/cards", "rb");
+	if(fp == NULL) {
+		printf("ERROR to open /proc/asound/cards file\n");
+		return -1;
+	}
+	int found = 0;
+	char str_index[3] = {0};
+	while(fgets(buf, buf_size, fp)) {
+		// 字符串buf中是否包含 str
+		if(strstr(buf, str) != NULL) {
+			found = 1;
+			// 复制前两个字符串, 够用了
+			strncpy(str_index, buf, 2);
+			assert(str_index[0] != 0);
+		}
+	}
 
+	if(found) {
+		ret = atoi(str_index);
+		assert(ret>=0);
+
+		// 构造名字字符串
+		sprintf(name, "hw:%d", ret);
+
+		ret = 0;
+	}
+
+
+end:
+	fclose(fp);
+	return ret;
 }
 
 /**

@@ -37,6 +37,11 @@ int main(int argc, char *argv[])
 	int err;
 	char *buffer;
 
+	if(argc != 2) {
+		printf("usage:%s outfilename\n", argv[0]);
+		return -1;
+	}
+
 
 	int buffer_frames = 128;
 	unsigned int sample; // 常用的采样频率: 44100Hz 、16000HZ、8000HZ、48000HZ、22050HZ
@@ -45,7 +50,14 @@ int main(int argc, char *argv[])
 	snd_pcm_format_t format=SND_PCM_FORMAT_S16_LE; // 采样位数：16bit、LE格式
 
 	sound_card_info info;
-	if(0 != get_sound_card_info(argv[1], &info))
+	char name[100]= {0};
+	if(0 != found_sound_card(name))
+	{
+		printf("not found sound card\n");
+		return -1;
+	}
+
+	if(0 != get_sound_card_info(name, &info))
 	{
 		printf("not support sound card or sound card not exist\n");
 		return -1;
@@ -62,17 +74,17 @@ int main(int argc, char *argv[])
  
  
 	/*打开音频采集卡硬件，并判断硬件是否打开成功，若打开失败则打印出错误提示*/
-	if ((err = snd_pcm_open (&capture_handle, argv[1],SND_PCM_STREAM_CAPTURE,0))<0) 
+	if ((err = snd_pcm_open (&capture_handle, name,SND_PCM_STREAM_CAPTURE,0))<0) 
 	{
-		printf("无法打开音频设备: %s (%s)\n",  argv[1],snd_strerror (err));
+		printf("无法打开音频设备: %s (%s)\n",  name, snd_strerror (err));
 		exit(1);
 	}
 	printf("音频接口打开成功.\n");
  
 	/*创建一个保存PCM数据的文件*/
-	if((pcm_data_file = fopen(argv[2], "wb")) == NULL)
+	if((pcm_data_file = fopen(argv[1], "wb")) == NULL)
 	{
-		printf("无法创建%s音频文件.\n",argv[2]);
+		printf("无法创建%s音频文件.\n",argv[1]);
 		exit(1);
 	} 
 	printf("用于录制的音频文件已打开.\n");

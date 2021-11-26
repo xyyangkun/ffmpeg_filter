@@ -37,4 +37,14 @@ typedef struct s_sound_card_info
  */
 int get_sound_card_info(const char *name, sound_card_info *info);
 
+
+/**
+ * @brief 查找usb声卡名字
+ * 执行以上命令，查找对应USB-Audio的一行，如果有多个，只找第一个
+ * 找到之后将名字返回
+ * @param[inout] name 找到声卡后将名字返回
+ * @return 0:success, other:failure
+ */
+int found_sound_card(const char *name);
+
 #endif//_AUDIO_CARD_H_
