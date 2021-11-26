@@ -52,10 +52,10 @@ LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 IF(CROSS_COMPILE)
 # 设置默认链接块
-set(LINK_LIB_LIST m pthread avformat avdevice avcodec avfilter swresample avutil rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg)
+set(LINK_LIB_LIST m pthread asound avformat avdevice avcodec avfilter swresample avutil rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg)
 message(STATUS "arm corss compile")
 ELSE()
-set(LINK_LIB_LIST m pthread swresample)
+set(LINK_LIB_LIST m pthread asound swresample)
 message(STATUS "x86 compile")
 ENDIF(CROSS_COMPILE)
 
@@ -170,6 +170,10 @@ else()
     list(REMOVE_ITEM TEST_SRC_LIST ./test_player.cpp)
 endif()
 
+
+#list(REMOVE_ITEM TEST_SRC ./sound_card_get.c ./sound_card_get_test.c)
+list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c)
+
 foreach(TEST_SRC ${TEST_SRC_LIST})
     STRING(REGEX REPLACE "^\\./|\\.c[a-zA-Z0-9_]*$" "" TEST_EXE_NAME ${TEST_SRC})
     message(STATUS "add test:${TEST_EXE_NAME}")
@@ -181,7 +185,12 @@ foreach(TEST_SRC ${TEST_SRC_LIST})
     target_link_libraries(${TEST_EXE_NAME} ${LINK_LIB_LIST})
 endforeach()
 
+
 if(MSVC AND SDL2_FOUND AND AVCODEC_FOUND AND AVUTIL_FOUND)
     set_target_properties(test_player PROPERTIES LINK_FLAGS "/SAFESEH:NO /SUBSYSTEM:WINDOWS" )
 endif()
 
+
+file(GLOB sound_card_get_test_src_list sound_card_get.c sound_card_get_test.c)
+add_executable(sound_card_get_test  ${sound_card_get_test_src_list})  
+target_link_libraries(sound_card_get_test ${LINK_LIB_LIST})
