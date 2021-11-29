@@ -172,7 +172,7 @@ endif()
 
 
 #list(REMOVE_ITEM TEST_SRC ./sound_card_get.c ./sound_card_get_test.c)
-list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c)
+list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c)
 
 foreach(TEST_SRC ${TEST_SRC_LIST})
     STRING(REGEX REPLACE "^\\./|\\.c[a-zA-Z0-9_]*$" "" TEST_EXE_NAME ${TEST_SRC})
@@ -194,3 +194,11 @@ endif()
 file(GLOB sound_card_get_test_src_list sound_card_get.c sound_card_get_test.c)
 add_executable(sound_card_get_test  ${sound_card_get_test_src_list})  
 target_link_libraries(sound_card_get_test ${LINK_LIB_LIST})
+
+file(GLOB multi_audio_mix_list multi_audio_mix.c sound_card_get.c)
+add_executable(multi_audio_mix ${multi_audio_mix_list})  
+target_link_libraries(multi_audio_mix ${LINK_LIB_LIST})
+
+file(GLOB multi_audio_mix_48kin_list multi_audio_mix_48kin.c sound_card_get.c)
+add_executable(multi_audio_mix_48kin ${multi_audio_mix_48kin_list})  
+target_link_libraries(multi_audio_mix_48kin ${LINK_LIB_LIST})

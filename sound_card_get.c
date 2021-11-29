@@ -210,7 +210,7 @@ cat /proc/asound/cards
  * @param[inout] name 找到声卡后将名字返回
  * @return 0:success, other:failure
  */
-int found_sound_card(const char *name)
+int found_sound_card(char *name)
 {
 	int buf_size = 100;
 	char buf[buf_size+1];

@@ -45,6 +45,6 @@ int get_sound_card_info(const char *name, sound_card_info *info);
  * @param[inout] name 找到声卡后将名字返回
  * @return 0:success, other:failure
  */
-int found_sound_card(const char *name);
+int found_sound_card(char *name);
 
 #endif//_AUDIO_CARD_H_
