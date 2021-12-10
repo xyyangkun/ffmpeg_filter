@@ -53,6 +53,8 @@
 
 #include "sound_card_get.h"
 
+#include "multi_audio_mix.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -74,10 +76,13 @@ typedef void (*rtsp_cb)(void *buf, int len, int time, int type, long param);
 
 int is_start = 0;
 int usb_is_start = 0;
-static void sigterm_handler(int sig) {
-	printf("get sig:%d\n", sig);
+void set_mix_exit() {
 	is_start = 0;
 	usb_is_start = 0;
+}
+static void sigterm_handler(int sig) {
+	printf("get sig:%d\n", sig);
+	set_mix_exit();
 }
 
 
@@ -295,7 +300,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return AVERROR_FILTER_NOT_FOUND;
     }
     
-    snprintf(args, sizeof(args), "volume=0.1");
+    snprintf(args, sizeof(args), "volume=1");
 	
 	err = avfilter_graph_create_filter(&volume0_ctx, volume0, "volume0",
                                        args, NULL, filter_graph);
@@ -437,9 +442,10 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return AVERROR_FILTER_NOT_FOUND;
     }
     
-    snprintf(args, sizeof(args), "volume=0.2");
+    //snprintf(args, sizeof(args), "volume=0.2");
+    snprintf(args, sizeof(args), "volume=1");
 	
-	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume_sink",
+	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume3",
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
@@ -1216,6 +1222,7 @@ static int interruptcb(void *ctx) {
 	return 0;
 }
 
+
 int init_rtsp()
 {
 	int ret;
@@ -1384,6 +1391,7 @@ int init_rtsp()
 		}
 	}
 
+	// 初始化3个输入fifo
     if (init_fifo_test(&fifo1))
     //if (init_fifo(&fifo1))
 	{
@@ -2386,9 +2394,92 @@ int deinit_swr() {
 	return 0;
 }
 
+/**
+ * @brief 设置音量
+ * @param[in] index  3 设置输出音量  0:输入1   1:输入2     2:输入3
+ * @param[in] volume 输入音量字符串
+ * @ return 0 success
+ */
+int set_mix_volume(unsigned char index, const char *volume) {
+	// const char *volume = "0.1";
+	// const char *volume = "5";
+	// av_opt_set(_volume->priv, "volume", AV_STRINGIFY("volume=0.1"), 0);
+	
+	int ret;
+	
+	if(index == 0) {
+		// 通过avfilter_graph_send_command 实现
+		const char *target = "volume0";
+		const char *cmd = "volume";
+		const char *arg = volume;
+		char *res=NULL;
+		int res_len=0;
+		int flags=0;
+		ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+		if(ret < 0) {
+			printf("graph send comman error!!\n");
+		}
+	}
+	else if(index == 1) {
+		// 通过avfilter_graph_send_command 实现
+		const char *target = "volume1";
+		const char *cmd = "volume";
+		const char *arg = volume;
+		char *res=NULL;
+		int res_len=0;
+		int flags=0;
+		ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+		if(ret < 0) {
+			printf("graph send comman error!!\n");
+		}
+	}
+	else if(index == 2) {
+		// 通过avfilter_graph_send_command 实现
+		const char *target = "volume2";
+		const char *cmd = "volume";
+		const char *arg = volume;
+		char *res=NULL;
+		int res_len=0;
+		int flags=0;
+		ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+		if(ret < 0) {
+			printf("graph send comman error!!\n");
+		}
+	}
+	else if(index == 3) {
+		// 通过avfilter_graph_send_command 实现
+		const char *target = "volume_sink";
+		const char *cmd = "volume";
+		const char *arg = volume;
+		char *res=NULL;
+		int res_len=0;
+		int flags=0;
+		ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+		if(ret < 0) {
+			printf("graph send comman error!!\n");
+		}
+	}
+	else {
+		printf("get param error!!!\n");
+		return -1;
+	}
 
-int main(int argc, const char * argv[])
-{
+	return 0;
+}
+
+#ifndef TEST
+int main_proc(int argc, const char * argv[]);
+// 其他程序引用
+void* multi_audio_mix_proc(void *arg) {
+	main_proc(0,0);
+}
+int main_proc(int argc, const char * argv[]){
+#else//TEST
+// 本程序测试使用
+int main(int argc, const char * argv[]){
+#endif//TEST
+
+
 	signal(SIGINT, sigterm_handler);
 
     av_log_set_level(AV_LOG_VERBOSE);
@@ -2545,7 +2636,7 @@ while(av_audio_fifo_size(fifo1) <= 0 && av_audio_fifo_size(fifo2) <= 0
         //avcodec_free_context(&output_codec_context);
     if (output_format_context) {
         //avio_closep(&output_format_context->pb);
-        avformat_free_context(output_format_context);
+        //avformat_free_context(output_format_context);
     }
 
 	printf("==========================>%d\n", __LINE__);

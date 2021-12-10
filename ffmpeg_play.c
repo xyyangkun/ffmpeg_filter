@@ -3,6 +3,8 @@
  *       Filename:  ffmpeg_play.c
  *
  *    Description:  from https://github.com/gavv/snippets/blob/master/decode_play/ffmpeg_play.cpp
+ *    https://gavv.github.io/articles/decode-play/
+ *    https://its201.com/article/a499957739/82625493
  *
  *        Version:  1.0
  *        Created:  2021年11月26日 17时09分26秒
@@ -29,11 +31,11 @@
 #include <stdio.h>
 #include <assert.h>
 
-extern "C" {
+//extern "C" {
 #include <libavformat/avformat.h>
 #include <libavdevice/avdevice.h>
 #include <libavcodec/avcodec.h>
-}
+//}
 
 int main(int argc, char** argv) {
     if (argc != 1) {

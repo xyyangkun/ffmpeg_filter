@@ -1,0 +1,18 @@
+# 1. 测试程序中默认ip为以下值， 如果测试请改为以下值
+tx ip: 192.168.2.237
+rx ip: 192.168.2.235
+
+# 测试16通道的创建 绑定 销毁, 用虚拟坐席划分接口测试，需要更改rx_server程序
+send_v_screen_2_16_test.py  
+send_v_screen_bind_6_16_test.py
+send_v_screen_unbind_7_16_test.py  
+
+#  测试虚拟划分接口 创建5个虚拟化分
+send_v_screen_2.py
+send_v_screen_bind_6.py  
+send_v_screen_unbind_7.py  
+
+# 测试信号接口，创建4个虚拟化分
+send_v_signal_list_3.py  
+send_v_signal_bind_4.py  
+send_v_signal_unbind_5.py

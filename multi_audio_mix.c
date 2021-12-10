@@ -61,16 +61,47 @@ static int usb_frame_size = 128;
 
 const int alsa_out_samples = 1024;
 
+AVFilterGraph *graph;
+AVFilterContext *src0, *src1, *src2, *sink;
+
 // rtsp 回调，连接rtsp成功后，接收server端发来的音视频数据
 // type = 0 视频 1 音频
 typedef void (*rtsp_cb)(void *buf, int len, int time, int type, long param);
+
+// 设置输入数量权重，
+void set_weights(const char *str){
+	int ret;
+#if 0
+	// src ="weights=1 1 1";
+#else
+	// 通过avfilter_graph_send_command 实现
+	const char *target = "amix";
+	const char *cmd = "weights";
+	const char *arg = str;
+	char *res=NULL;
+	int res_len=0;
+	int flags=0;
+	ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
+	if(ret < 0) {
+		printf("graph send comman error!!\n");
+	}
+
+#endif
+}
+
+
 
 int is_start = 0;
 int usb_is_start = 0;
 static void sigterm_handler(int sig) {
 	printf("get sig:%d\n", sig);
+	if(sig == SIGUSR1) {
+
+		return;
+	}
 	is_start = 0;
 	usb_is_start = 0;
+
 }
 
 
@@ -133,8 +164,6 @@ AVFormatContext *output_format_context = NULL;
 AVCodecContext *output_codec_context = NULL;
 
 
-AVFilterGraph *graph;
-AVFilterContext *src0, *src1, *src2, *sink;
 
 static int init_fifo(AVAudioFifo **fifo)
 {
@@ -507,6 +536,8 @@ static int open_output_alsa_file(const char *filename,
 #if 1
   // find output format for ALSA device
     AVOutputFormat* fmt = av_guess_format("alsa", NULL, NULL);
+    //AVOutputFormat* fmt = av_guess_format("alsa", "hw:0", NULL); //  打开声卡0
+    //AVOutputFormat* fmt = av_guess_format("alsa", "hw:1", NULL); //  打开声卡1
     if (!fmt) {
         fprintf(stderr, "av_guess_format()\n");
         exit(1);
@@ -520,8 +551,20 @@ static int open_output_alsa_file(const char *filename,
         exit(1);
     }
 
+
     // tell format context to use ALSA as ouput device
     fmt_ctx->oformat = fmt;
+#if 1
+	// alsa_enc.c  输出， alsa_dec.c 是输入
+	//  libavdevice/alsa_enc.c  audio_write_header  libavdevice/alsa.c ff_alsa_open
+	//  可以知道ctx->url没有设置， 使用默认default
+    fmt_ctx->url = "hw:1";
+    //fmt_ctx->filename = "hw:1";
+#else
+	// 使用这个函数打开
+	avformat_alloc_output_context2
+#endif
+
 
     // add stream to format context
     AVStream* stream = avformat_new_stream(fmt_ctx, NULL);
@@ -1997,7 +2040,7 @@ int main(int argc, const char * argv[])
 
 #if 1
 	// arm 
-	const char *in_filename = "hw:1";
+	const char *in_filename = "hw:2";
 	const char * channel = "2";
 
 	usb_audio_channels = 2;                       // 1

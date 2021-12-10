@@ -172,7 +172,7 @@ endif()
 
 
 #list(REMOVE_ITEM TEST_SRC ./sound_card_get.c ./sound_card_get_test.c)
-list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c)
+list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c ./proc_cmd.cpp  ./t_proc_cmd.cpp ./proc_mix_cmd.cpp ./test_demux.c ./demux.c)
 
 foreach(TEST_SRC ${TEST_SRC_LIST})
     STRING(REGEX REPLACE "^\\./|\\.c[a-zA-Z0-9_]*$" "" TEST_EXE_NAME ${TEST_SRC})
@@ -202,3 +202,20 @@ target_link_libraries(multi_audio_mix ${LINK_LIB_LIST})
 file(GLOB multi_audio_mix_48kin_list multi_audio_mix_48kin.c sound_card_get.c)
 add_executable(multi_audio_mix_48kin ${multi_audio_mix_48kin_list})  
 target_link_libraries(multi_audio_mix_48kin ${LINK_LIB_LIST})
+#编译目标设置-DTEST宏
+#https://stackoverflow.com/questions/5096881/does-set-target-properties-in-cmake-override-cmake-cxx-flags
+set_target_properties(multi_audio_mix_48kin PROPERTIES  COMPILE_FLAGS "-DTEST") # ok
+#target_compile_definitions(multi_audio_mix_48kin PRIVATE -DTEST)               #ok
+
+#file(GLOB proc_cmd_list proc_cmd.cpp  t_proc_cmd.cpp)
+#add_executable(t_proc_cmd ${proc_cmd_list})  
+#target_link_libraries(t_proc_cmd ${LINK_LIB_LIST})
+
+# 
+file(GLOB proc_mix_cmd_list proc_mix_cmd.cpp  proc_cmd.cpp multi_audio_mix_48kin.c sound_card_get.c)
+add_executable(proc_mix_cmd ${proc_mix_cmd_list})  
+target_link_libraries(proc_mix_cmd ${LINK_LIB_LIST})
+
+file(GLOB test_demux_list test_demux.c demux.c)
+add_executable(test_demux ${test_demux_list})  
+target_link_libraries(test_demux ${LINK_LIB_LIST})
