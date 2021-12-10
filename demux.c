@@ -53,6 +53,7 @@ static int video_dst_bufsize;
 static int video_stream_idx = -1, audio_stream_idx = -1;
 static AVFrame *frame = NULL;
 static AVPacket pkt;
+static AVPacket pkt1;
 static int video_frame_count = 0;
 static int audio_frame_count = 0;
 
@@ -64,6 +65,8 @@ static pthread_t th_mux_read_proc;
 
 static int is_call_close = 0; // 关闭调用
 static long cb_handle = 0;
+
+AVBitStreamFilterContext* h264bsfc = NULL;
 
 static int decode_packet(int *got_frame, int cached);
 
@@ -83,14 +86,47 @@ static int decode_packet(int *got_frame, int cached)
 
     if (pkt.stream_index == video_stream_idx) {
 		// 得到h264/h265 视频帧数据，将视频帧数据传给回调函数
+		// 两种解析MP4方法
+		// https://blog.csdn.net/m0_37346206/article/details/94029945
+		// https://blog.csdn.net/godvmxi/article/details/52875058
 		// av_cb(buf, size, 1);
-		av_cb(pkt.data, pkt.size, 2, cb_handle);
-		const char start_code[4] = { 0, 0, 0, 1 };
-		if(0 == memcmp(start_code, pkt.data, 4)) {
-			printf("=====================> yes get!!\n");
-		}else{
-			//printf("=====================> not get!!\n");
-		}
+		 int a = av_bitstream_filter_filter(h264bsfc, 
+				 fmt_ctx->streams[video_stream_idx]->codec, 
+				 NULL, 
+				 &pkt1.data, 
+				 &pkt1.size, 
+				 pkt.data, 
+				 pkt.size, 
+				 pkt.flags & AV_PKT_FLAG_KEY);
+		 /*
+		 printf("a=%d\n", a);
+			 printf("new_pkt.data=%p %p %d %d\n",
+				 pkt.data, pkt1.data,
+				 pkt.size, pkt1.size);
+				 */
+		 if(a<0){
+			printf("error to get bit stream\n");
+			exit(-1);
+		 }
+#if 0
+		 if(a>=0){
+		 av_free_packet(&pkt);
+		 pkt.data = new_pkt.data;
+		 pkt.size = new_pkt.size;
+		 }
+#endif
+		//av_cb(pkt.data, pkt.size, 2, cb_handle);
+		//av_cb(pkt1.data, pkt1.size, 2, cb_handle);
+		
+
+		// 释放内存
+		av_freep(&pkt1.data);
+		av_packet_free_side_data(&pkt1);
+		av_packet_unref(&pkt1);
+		//av_free_packet(&pkt1);
+		pkt1.data = NULL;
+		pkt1.size = 0;
+
     } else if (pkt.stream_index == audio_stream_idx) {
 		assert(audio_dec_ctx);
         /* decode audio frame */
@@ -361,6 +397,12 @@ int open_local_file(char *filename, local_av_callback _cb, local_av_close_callba
 	pkt.data = NULL;
 	pkt.size = 0;
 
+	av_init_packet(&pkt1);
+	pkt1.data = NULL;
+	pkt1.size = 0;
+
+	h264bsfc =  av_bitstream_filter_init("h264_mp4toannexb"); 
+
 	// 创建线程读取文件, 并将音视频数据放入回调
 	ret = pthread_create(&th_mux_read_proc, NULL, mux_read_proc, NULL);	
 	if(ret!= 0) {
@@ -405,6 +447,8 @@ int close_local_file() {
 		av_frame_free(&frame);
 		frame = NULL;
 	}
+
+	av_bitstream_filter_close(h264bsfc);
 }
 
 

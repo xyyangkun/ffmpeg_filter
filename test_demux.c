@@ -102,7 +102,9 @@ void _signal(int signo)
 
 }
 
-char *path = "/nfsroot/rk3568/rk3568_1080p_h264.mp4";
+//char *path = "/nfsroot/rk3568/rk3568_1080p_h264.mp4";
+//char *path = "/nfsroot/rk3568/blackmagicdesign_p30.mp4";
+char *path = "/nfsroot/rk3568/h264_720p_founders.mp4";
 
 int main() {
 	
