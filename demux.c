@@ -59,6 +59,11 @@ static int audio_frame_count = 0;
 
 // 音视频帧数据回调
 static local_av_callback av_cb = NULL;
+
+static local_av_callback_v1 audio_cb = NULL;
+static local_av_callback_v1 video_cb = NULL;
+
+
 static local_av_close_callback close_cb = NULL;
 
 static pthread_t th_mux_read_proc;
@@ -116,8 +121,10 @@ static int decode_packet(int *got_frame, int cached)
 		 }
 #endif
 		//av_cb(pkt.data, pkt.size, 2, cb_handle);
-		//av_cb(pkt1.data, pkt1.size, 2, cb_handle);
-		
+		av_cb(pkt1.data, pkt1.size, 2, cb_handle);
+		if(video_cb) {
+			video_cb((void*)&pkt1, cb_handle);
+		}
 
 		// 释放内存
 		av_freep(&pkt1.data);
@@ -148,6 +155,12 @@ static int decode_packet(int *got_frame, int cached)
                    cached ? "(cached)" : "",
                    audio_frame_count++, frame->nb_samples,
                    av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));
+
+			printf("pts:%lld %lld %lld  time_base: num:%d, den:%d\n",
+					frame->pts, 
+					frame->pkt_pts, 
+					frame->pkt_dts, 
+					audio_dec_ctx->time_base.num, audio_dec_ctx->time_base.den);
 #endif
 
             /* Write the raw audio data samples of the first plane. This works
@@ -160,6 +173,9 @@ static int decode_packet(int *got_frame, int cached)
              * to packed data. */
             //fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
 			av_cb(frame->extended_data[0], unpadded_linesize, 1, cb_handle);
+			if(audio_cb) {
+				audio_cb((void*)frame, cb_handle);
+			}
         }
     }
 
@@ -262,7 +278,7 @@ static void *mux_read_proc(void *param) {
 	int ret;
 	int got_frame;
     /* read frames from the file */
-	while (av_read_frame(fmt_ctx, &pkt) >= 0) {
+	while (av_read_frame(fmt_ctx, &pkt) >= 0 && is_call_close==0) {
 		AVPacket orig_pkt = pkt;
 		do {
 			ret = decode_packet(&got_frame, 0);
@@ -323,6 +339,12 @@ end:
 }
 
 
+
+int set_local_file_cb_v1(local_av_callback_v1 _audio_cb, local_av_callback_v1 _video_cb, long handle) 
+{
+	audio_cb = _audio_cb;
+	video_cb = _video_cb;
+}
 
 /**
  * @brief 打开本地文件
@@ -421,26 +443,37 @@ int open_local_file(char *filename, local_av_callback _cb, local_av_close_callba
 int close_local_file() {
 	is_call_close = 1;
 
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	// 等待线程退出
 	pthread_join(th_mux_read_proc, NULL);
+
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	
 	// 置空回调函数
 	av_cb = NULL;
 	close_cb = NULL;
+
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 
 	// 释放ffmpeg内存
 	if(video_dec_ctx) {
 		avcodec_free_context(&video_dec_ctx);
 		video_dec_ctx = NULL;
 	}
+
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	if(audio_dec_ctx) {
 		avcodec_free_context(&audio_dec_ctx);
 		audio_dec_ctx = NULL;
 	}
+
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	if(fmt_ctx) {
 		avformat_close_input(&fmt_ctx);
 		fmt_ctx = NULL;
 	}
+
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	cb_handle = 0;
 
 	if(frame){
@@ -448,6 +481,7 @@ int close_local_file() {
 		frame = NULL;
 	}
 
+	printf("%s %d===================>\n", __FUNCTION__, __LINE__);
 	av_bitstream_filter_close(h264bsfc);
 }
 

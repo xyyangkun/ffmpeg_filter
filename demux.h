@@ -54,6 +54,16 @@ typedef void (*local_av_callback)(void* buf, unsigned int buf_size,
 		long handle);
 
 /**
+ * @brief 解析本地mp4a文件时,得到的音频视频帧文件回调
+ * @param[in] buf_handle 音视频内容 handle,   音频解码后的AVFrame,  视频packet
+ * @param[in] handle 回调函数需要的句柄
+ */
+typedef void (*local_av_callback_v1)(void* buf_handle, 
+		long handle);
+
+
+
+/**
  * @brief 文件读取结束或者主动调用文件关闭回调
  * @param[in] type 1 文件读完， 2 文件未读完，上层关闭读取操作
  * @param[in] handle 回调函数需要的句柄
@@ -78,6 +88,16 @@ typedef void (*local_av_close_callback)(
  * @return 0 success, other failed
  */
 int open_local_file(char *filename, local_av_callback _cb, local_av_close_callback _close_cb, long handle);
+
+
+/**
+ * @brief 设置mp4音视频数据回调
+ * @param[in] _audio_cb 声音回调函数
+ * @param[in] _video_cb 视频回调函数
+ * @param[in] handle  回调函数handle
+ * @return 0 success, other failed
+ */
+int set_local_file_cb_v1(local_av_callback_v1 _audio_cb, local_av_callback_v1 _video_cb, long handle);
 
 /**
  * @brief 关闭本地文件

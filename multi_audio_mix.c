@@ -53,6 +53,8 @@
 #include <signal.h>
 #include <assert.h>
 
+#include "sound_card_get.h"
+
 #define OUTPUT_CHANNELS 2
 int usb_audio_channels = 2;                       // 1
 int usb_audio_sample_rate = 16000;
@@ -69,6 +71,7 @@ AVFilterContext *src0, *src1, *src2, *sink;
 typedef void (*rtsp_cb)(void *buf, int len, int time, int type, long param);
 
 // 设置输入数量权重，
+// 由于ffmpeg4.1的amix没有实现weights命令，实现后才可以正常调用这个函数
 void set_weights(const char *str){
 	int ret;
 #if 0
@@ -81,9 +84,10 @@ void set_weights(const char *str){
 	char *res=NULL;
 	int res_len=0;
 	int flags=0;
+	assert(graph);
 	ret = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags);
 	if(ret < 0) {
-		printf("graph send comman error!!\n");
+		printf("graph send comman error!!:%d ==>%d %s\n", ret, ENOSYS, av_err2str(ret));
 	}
 
 #endif
@@ -97,6 +101,14 @@ static void sigterm_handler(int sig) {
 	printf("get sig:%d\n", sig);
 	if(sig == SIGUSR1) {
 
+		printf("will set weights\n");
+		//const char *str = "weights:1, 0, 1";
+		//const char *str = "weights='1 0.5 1'";
+		//const char *str = "1 0.5 1";
+		const char *str = "weights=1 0.5 1";
+		//const char *str = "weights:1 0.5 1";
+		printf("weights:%s\n", str);
+		set_weights(str);
 		return;
 	}
 	is_start = 0;
@@ -417,6 +429,10 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     }
     
     snprintf(args, sizeof(args), "inputs=3");
+    //snprintf(args, sizeof(args), "inputs=3:weights=1 1 1");
+    //snprintf(args, sizeof(args), "inputs=3:duration=longest:dropout_transition=0:weights='1 1 1'");
+    //snprintf(args, sizeof(args), "inputs=3:duration=first:weights='1 0.1 1'");
+    //snprintf(args, sizeof(args), "inputs=3:duration=first:weights='1 0.5 0.5'");
 	
 	err = avfilter_graph_create_filter(&mix_ctx, mix_filter, "amix",
                                        args, NULL, filter_graph);
@@ -424,6 +440,13 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio amix filter\n");
         return err;
     }
+
+	{
+		uint8_t *volume_str = NULL;
+		av_opt_get(mix_ctx->priv, "weights", 0, &volume_str);
+		printf("========================>get weights:%s\n", volume_str);
+		av_freep(&volume_str);
+	}
 
 	/****** volume sink ******* */
     /* Create volume filter. */
@@ -558,7 +581,7 @@ static int open_output_alsa_file(const char *filename,
 	// alsa_enc.c  输出， alsa_dec.c 是输入
 	//  libavdevice/alsa_enc.c  audio_write_header  libavdevice/alsa.c ff_alsa_open
 	//  可以知道ctx->url没有设置， 使用默认default
-    fmt_ctx->url = "hw:1";
+    //fmt_ctx->url = "hw:1";
     //fmt_ctx->filename = "hw:1";
 #else
 	// 使用这个函数打开
@@ -1501,7 +1524,8 @@ void *usb_recv_proc(void *param)
 				fprintf(stderr, "Could not allocate output frame samples (error '%s')\n",
 						av_err2str(ret));
 				av_frame_free(&frame);
-				return ret;
+				//return ret;
+				return NULL;
 			}
 			av_frame_make_writable (frame);
 			av_frame_set_pkt_size(frame, pkt_size);
@@ -2017,6 +2041,7 @@ end:
 int main(int argc, const char * argv[])
 {
 	signal(SIGINT, sigterm_handler);
+	signal(SIGUSR1, sigterm_handler);
 
     av_log_set_level(AV_LOG_VERBOSE);
     
@@ -2037,7 +2062,7 @@ int main(int argc, const char * argv[])
 	avdevice_register_all();
 
 
-
+#if 0
 #if 1
 	// arm 
 	const char *in_filename = "hw:2";
@@ -2054,7 +2079,43 @@ int main(int argc, const char * argv[])
 	usb_audio_sample_rate = 16000;
 	usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
 #endif
-	err = init_audio_capture(in_filename, channel);
+
+#else
+	// 动态获取摄像头参数
+	sound_card_info info;
+	char dev_name[100]= {0};
+	if(0 != found_sound_card(dev_name))
+	{
+		printf("not found sound card\n");
+		return -1;
+	}
+
+	if(0 != get_sound_card_info(dev_name, &info))
+	{
+		printf("not support sound card or sound card not exist\n");
+		return -1;
+	}
+
+	char channel[100] = {0};
+	usb_audio_channels = info.channels;                       // 1
+	usb_audio_sample_rate = info.sample;
+	printf("=========================> usb_audio_sample_rate = %d\n", usb_audio_sample_rate);
+	if (usb_audio_channels == 1) {
+		usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
+		sprintf(channel, "%d", 1);
+		printf("===========================> AV_CH_LAYOUT_STEREO\n");
+	}
+	else {
+		usb_audio_channel_layout = AV_CH_LAYOUT_STEREO;
+		sprintf(channel, "%d", 2);
+		printf("==========================> AV_CH_LAYOUT_STEREO\n");
+	}
+
+
+#endif
+
+	//  err = init_audio_capture(in_filename, channel);
+	err = init_audio_capture(dev_name, channel);
 	assert(err == 0);
 	ifmt_ctx3 = ifmt_ctx;	
 

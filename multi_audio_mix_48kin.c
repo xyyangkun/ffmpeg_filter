@@ -1208,6 +1208,7 @@ void *recv_filter_proc(void *param)
 	}
 	av_log(NULL, AV_LOG_INFO, "will exit in :%d", __LINE__);
 end:
+
     if (ret < 0 && ret != AVERROR_EOF) {
         av_log(NULL, AV_LOG_ERROR, "Error occurred: %s\n", av_err2str(ret));
         exit(1);
@@ -1532,8 +1533,9 @@ void *usb_recv_proc(void *param)
 	int frame_size =0;
 
 #if 1
-    AVFrame *frame = av_frame_alloc();
+    //AVFrame *frame = av_frame_alloc();
 #endif
+	AVFrame *_frame;
 
 	uint8_t **dst_data = NULL;
 	int dst_nb_samples;
@@ -1633,35 +1635,34 @@ void *usb_recv_proc(void *param)
 #if 1
 			// 可以直接从package包中获取数据，然后生成AVFrame 包，将数据放入AVFrame包中
 			int pkt_size = pkt.size;
-			AVFrame *frame;
-			frame = av_frame_alloc();
+			_frame = av_frame_alloc();
 
-			frame->nb_samples     = pkt_size/2/usb_audio_channels;
-			//frame->channel_layout = av_get_default_channel_layout(AV_CH_LAYOUT_STEREO);
-			frame->channel_layout = AV_CH_LAYOUT_STEREO;
-			frame->format         = AV_SAMPLE_FMT_S16;
-			frame->sample_rate    = 16000;
+			_frame->nb_samples     = pkt_size/2/usb_audio_channels;
+			//_frame->channel_layout = av_get_default_channel_layout(AV_CH_LAYOUT_STEREO);
+			_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+			_frame->format         = AV_SAMPLE_FMT_S16;
+			_frame->sample_rate    = 16000;
 
-			if ((ret = av_frame_get_buffer(frame, 0)) < 0) {
+			if ((ret = av_frame_get_buffer(_frame, 0)) < 0) {
 				fprintf(stderr, "Could not allocate output frame samples (error '%s')\n",
 						av_err2str(ret));
-				av_frame_free(&frame);
+				av_frame_free(&_frame);
 				//return ret;
 				exit(1);
 			}
-			av_frame_make_writable (frame);
-			av_frame_set_pkt_size(frame, pkt_size);
+			av_frame_make_writable (_frame);
+			av_frame_set_pkt_size(_frame, pkt_size);
 
 
-			int frame_size = frame->nb_samples;
+			int frame_size = _frame->nb_samples;
 			//printf("usb ====> frame_size:%d\n", frame_size);
 			//printf("usb ====> nb_samples:%d\n", frame->nb_samples);
 			//printf("usb ====>  pkt_size:%d %d\n", frame->pkt_size, pkt_size);
-			memcpy(frame->data[0], pkt.data, pkt_size);
+			memcpy(_frame->data[0], pkt.data, pkt_size);
 
 			assert(fifo3);
 			assert(pkt_size> 0);
-			assert(frame->nb_samples> 0);
+			assert(_frame->nb_samples> 0);
 #if 1
 			// 转换成48k双通道后入栈
 
@@ -1728,7 +1729,7 @@ void *usb_recv_proc(void *param)
 
 
 			//av_frame_unref(frame);
-			av_frame_free(&frame);
+			av_frame_free(&_frame);
 #endif
 		}
 
@@ -1736,9 +1737,15 @@ void *usb_recv_proc(void *param)
 		av_packet_unref(&pkt);
 	}
 
-	av_frame_free(&frame);
 
 end:
+	if (dst_data)
+		av_freep(&dst_data[0]);
+	av_freep(&dst_data);
+
+	//av_frame_free(&frame);
+	av_frame_free(&_frame);
+
 	av_log(NULL, AV_LOG_INFO, "recv proc exit\n");
 
 	// ？这句话有用吗？没有这句话，会检测到有内存泄漏
@@ -2324,24 +2331,6 @@ int init_swr() {
 			src_ch_layout = AV_CH_LAYOUT_MONO;
 		src_rate = usb_audio_sample_rate;
 		// src_sample_fmt = AV_SAMPLE_FMT_S16;  // 暂时不支持除S16以外的格式
-
-		/* create resampler context */
-		swr_ctx3 = swr_alloc();
-		if (!swr_ctx3) {
-			fprintf(stderr, "Could not allocate resampler context\n");
-			ret = AVERROR(ENOMEM);
-			ret = -1;
-			goto end;
-		}
-
-		/* set options */
-		av_opt_set_int(swr_ctx3, "in_channel_layout",    src_ch_layout, 0);
-		av_opt_set_int(swr_ctx3, "in_sample_rate",       src_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx3, "in_sample_fmt", src_sample_fmt, 0);
-
-		av_opt_set_int(swr_ctx3, "out_channel_layout",    dst_ch_layout, 0);
-		av_opt_set_int(swr_ctx3, "out_sample_rate",       dst_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx3, "out_sample_fmt", dst_sample_fmt, 0);
 
 		/* create resampler context */
 		swr_ctx3 = swr_alloc();

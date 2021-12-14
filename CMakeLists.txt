@@ -50,10 +50,14 @@ endif ()
 LINK_DIRECTORIES(${LIBRARY_OUTPUT_PATH})
 
 
+ADD_DEFINITIONS(-DARM)
 IF(CROSS_COMPILE)
 # 设置默认链接块
 set(LINK_LIB_LIST m pthread asound avformat avdevice avcodec avfilter swresample avutil rga drm rockchip_mpp  z asound v4l2 v4lconvert jpeg)
 message(STATUS "arm corss compile")
+#add_definitions(-DARM)
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DARM")
+
 ELSE()
 set(LINK_LIB_LIST m pthread asound swresample)
 message(STATUS "x86 compile")
@@ -61,7 +65,7 @@ ENDIF(CROSS_COMPILE)
 
 IF(CROSS_COMPILE)
 set(SDL2_INCLUDE_DIR   ${SYSROOT_PATH}/usr/include)
-set(SDL2_LIBRARIES "-L ${SYSROOT_PATH}/usr/lib -lfaac")
+set(SDL2_LIBRARIES "-L ${SYSROOT_PATH}/usr/lib -lSDL2")
 ELSE()
 find_package(SDL2 QUIET)
 ENDIF(CROSS_COMPILE)
@@ -172,7 +176,8 @@ endif()
 
 
 #list(REMOVE_ITEM TEST_SRC ./sound_card_get.c ./sound_card_get_test.c)
-list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c ./proc_cmd.cpp  ./t_proc_cmd.cpp ./proc_mix_cmd.cpp ./test_demux.c ./demux.c)
+list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c ./proc_cmd.cpp  ./t_proc_cmd.cpp ./proc_mix_cmd.cpp ./test_demux.c ./demux.c 
+								./test_demux_audio_player.c ./test_sdl_timer.c ./test_demux_av_player.c)
 
 foreach(TEST_SRC ${TEST_SRC_LIST})
     STRING(REGEX REPLACE "^\\./|\\.c[a-zA-Z0-9_]*$" "" TEST_EXE_NAME ${TEST_SRC})
@@ -219,3 +224,17 @@ target_link_libraries(proc_mix_cmd ${LINK_LIB_LIST})
 file(GLOB test_demux_list test_demux.c demux.c)
 add_executable(test_demux ${test_demux_list})  
 target_link_libraries(test_demux ${LINK_LIB_LIST})
+
+file(GLOB test_demux_audio_player_list test_demux_audio_player.c demux.c)
+add_executable(test_demux_audio_player ${test_demux_audio_player_list})  
+#set_target_properties(test_demux_audio_player PROPERTIES  COMPILE_FLAGS "-DARM") # ok
+target_link_libraries(test_demux_audio_player ${LINK_LIB_LIST})
+
+file(GLOB test_demux_av_player_list test_demux_av_player.c demux.c)
+add_executable(test_demux_av_player ${test_demux_av_player_list})  
+#set_target_properties(test_demux_av_player PROPERTIES  COMPILE_FLAGS "-DARM") # ok
+target_link_libraries(test_demux_av_player ${LINK_LIB_LIST})
+
+file(GLOB test_sdl_timer_list test_sdl_timer.c)
+add_executable(test_sdl_timer ${test_sdl_timer_list})  
+target_link_libraries(test_sdl_timer ${LINK_LIB_LIST})
