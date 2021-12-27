@@ -60,11 +60,19 @@
 #include <pthread.h>
 #include <signal.h>
 #include <assert.h>
+#include "audio_recv.h"
+#include "audio_play.h"
+#include "audio_card_recv.h"
+#include "SDL2/SDL.h"
+#include <unistd.h>
+#include <assert.h>
+
+
 
 #define OUTPUT_CHANNELS 2
-int usb_audio_channels = 2;                       // 1
-int usb_audio_sample_rate = 16000;
-int usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
+//int usb_audio_channels = 2;                       // 1
+//int usb_audio_sample_rate = 16000;
+//int usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
 static int usb_frame_size = 128;
 static int usb_frame_size_trans = 128;
 
@@ -85,6 +93,32 @@ static void sigterm_handler(int sig) {
 	set_mix_exit();
 }
 
+// 音频通路选择
+static volatile int audio_sel = 5;
+/*
+ 0 选通输入第1路音频
+ 1 选通输入第2路音频
+ 2 选通输入第3路音频
+ 3 选通输入第4路音频
+ 4 选通输入第5路音频
+ 5 选通输出音频
+ */
+
+//  输入的5路声音是否存在
+//  1 表示有输入源，从输入源获取数据 0表示没有输入源，全部是静音数据
+static volatile int audio0_exist=0;
+static volatile int audio1_exist=0;
+static volatile int audio2_exist=0;
+static volatile int audio3_exist=0;
+static volatile int audio4_exist=0;
+
+#define AUIDIO_TICK_INTERVAL    21
+
+
+
+// 打开声卡
+FHANDLE play_hdmi_hd = NULL;
+FHANDLE play_35_hd = NULL;
 
 static AVFormatContext *ifmt_ctx1 = NULL;
 static AVFormatContext *ifmt_ctx2 = NULL;
@@ -96,15 +130,15 @@ static AVCodecContext *dec_ctx3;
 AVAudioFifo *fifo1 = NULL;
 AVAudioFifo *fifo2 = NULL;
 AVAudioFifo *fifo3 = NULL;
+AVAudioFifo *fifo4 = NULL;
+AVAudioFifo *fifo5 = NULL;
+
 pthread_mutex_t counter_mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t counter_mutex2 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t counter_mutex3 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t counter_mutex4 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t counter_mutex5 = PTHREAD_MUTEX_INITIALIZER;
 
-
-// 根式转换
-static struct SwrContext *swr_ctx1 = NULL;
-static struct SwrContext *swr_ctx2 = NULL;
-static struct SwrContext *swr_ctx3 = NULL;
 
 rtsp_cb cb;
 static int videoindex;
@@ -152,7 +186,7 @@ AVCodecContext *output_codec_context = NULL;
 
 
 AVFilterGraph *graph;
-AVFilterContext *src0, *src1, *src2, *sink;
+AVFilterContext *src0, *src1, *src2, *src3, *src4, *sink;
 
 static int init_fifo(AVAudioFifo **fifo)
 {
@@ -167,6 +201,7 @@ static int init_fifo(AVAudioFifo **fifo)
     }
     return 0;
 }
+#if 0
 static int init_fifo3(AVAudioFifo **fifo)
 {
     if (!(*fifo = av_audio_fifo_alloc(AV_SAMPLE_FMT_S16,
@@ -176,6 +211,7 @@ static int init_fifo3(AVAudioFifo **fifo)
     }
     return 0;
 }
+#endif
 
 static int init_fifo_test(AVAudioFifo **fifo)
 {
@@ -199,24 +235,45 @@ static char *const get_error_text(const int error)
 static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 								AVFilterContext **src1,
 								AVFilterContext **src2,
+								AVFilterContext **src3,
+								AVFilterContext **src4,
 								AVFilterContext **sink)
 {
     AVFilterGraph *filter_graph;
+
+    AVFilterContext *abuffer4_ctx;
+    const AVFilter        *abuffer4;
+
+    AVFilterContext *abuffer3_ctx;
+    const AVFilter        *abuffer3;
+
     AVFilterContext *abuffer2_ctx;
     const AVFilter        *abuffer2;
+
     AVFilterContext *abuffer1_ctx;
     const AVFilter        *abuffer1;
+
 	AVFilterContext *abuffer0_ctx;
     const AVFilter        *abuffer0;
+
     AVFilterContext *mix_ctx;
     const AVFilter        *mix_filter;
+
     AVFilterContext *abuffersink_ctx;
     const AVFilter        *abuffersink;
 
+    AVFilterContext *volume4_ctx;
+    const AVFilter        *volume4;
+
+    AVFilterContext *volume3_ctx;
+    const AVFilter        *volume3;
+
     AVFilterContext *volume2_ctx;
     const AVFilter        *volume2;
+
     AVFilterContext *volume1_ctx;
     const AVFilter        *volume1;
+
     AVFilterContext *volume0_ctx;
     const AVFilter        *volume0;
     AVFilterContext *volume_sink_ctx;
@@ -248,6 +305,14 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 	uint64_t channel_layout2 = AV_CH_LAYOUT_STEREO;
 	//uint64_t channel_layout2 = usb_audio_channel_layout;
 #endif
+
+	int sample_rate3 = 48000;
+	int sample_fmt3 = AV_SAMPLE_FMT_S16 ;
+	uint64_t channel_layout3 = AV_CH_LAYOUT_STEREO;
+
+	int sample_rate4 = 48000;
+	int sample_fmt4 = AV_SAMPLE_FMT_S16 ;
+	uint64_t channel_layout4 = AV_CH_LAYOUT_STEREO;
 	
     int err;
 	
@@ -255,6 +320,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     filter_graph = avfilter_graph_alloc();
     if (!filter_graph) {
         av_log(NULL, AV_LOG_ERROR, "Unable to create filter graph.\n");
+		assert(1);
         return AVERROR(ENOMEM);
     }
 	
@@ -265,6 +331,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     abuffer0 = avfilter_get_by_name("abuffer");
     if (!abuffer0) {
         av_log(NULL, AV_LOG_ERROR, "Could not find the abuffer filter.\n");
+		assert(1);
         return AVERROR_FILTER_NOT_FOUND;
     }
 	
@@ -289,14 +356,17 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
+		assert(1);
         return err;
     }
+	assert(abuffer0_ctx);
 
     /****** volume src 0 ******* */
     /* Create volume filter. */
     volume0 = avfilter_get_by_name("volume");
     if (!volume0) {
         av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+		assert(1);
         return AVERROR_FILTER_NOT_FOUND;
     }
     
@@ -306,6 +376,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio amix filter\n");
+		assert(1);
         return err;
     }
 
@@ -348,7 +419,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     /****** volume src 1 ******* */
     /* Create volume filter. */
     volume1 = avfilter_get_by_name("volume");
-    if (!volume0) {
+    if (!volume1) {
         av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
         return AVERROR_FILTER_NOT_FOUND;
     }
@@ -366,7 +437,6 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 	
 
 	/****** abuffer 2 ******* */
-	
 	/* Create the abuffer filter;
      * it will be used for feeding the data into the graph. */
     abuffer2 = avfilter_get_by_name("abuffer");
@@ -403,7 +473,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     /****** volume src 2 ******* */
     /* Create volume filter. */
     volume2 = avfilter_get_by_name("volume");
-    if (!volume0) {
+    if (!volume2) {
         av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
         return AVERROR_FILTER_NOT_FOUND;
     }
@@ -416,6 +486,111 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
         return err;
     }
+
+
+
+	/****** abuffer 3 ******* */
+	/* Create the abuffer filter;
+     * it will be used for feeding the data into the graph. */
+    abuffer3 = avfilter_get_by_name("abuffer");
+    if (!abuffer3) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the abuffer filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+	
+	/* buffer audio source: the decoded frames from the decoder will be inserted here. */
+#if 1
+    snprintf(args, sizeof(args),
+			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
+             sample_rate3,
+             av_get_sample_fmt_name(sample_fmt3),
+			 channel_layout3);
+#else
+	// sample_rate=48000:sample_fmt=s16:channel_layout=0x3
+    snprintf(args, sizeof(args),
+			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
+			dec_ctx2->sample_rate,
+			av_get_sample_fmt_name(dec_ctx2->sample_fmt),
+			av_get_default_channel_layout(dec_ctx2->channels));
+#endif
+
+    av_log(NULL, AV_LOG_INFO, "src3 input format:%s", args);
+	err = avfilter_graph_create_filter(&abuffer3_ctx, abuffer3, "src3",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
+        return err;
+    }
+
+    /****** volume src 3 ******* */
+    /* Create volume filter. */
+    volume3 = avfilter_get_by_name("volume");
+    if (!volume3) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=1");
+	err = avfilter_graph_create_filter(&volume3_ctx, volume3, "volume3",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
+        return err;
+    }
+
+
+
+	/****** abuffer 4 ******* */
+	/* Create the abuffer filter;
+     * it will be used for feeding the data into the graph. */
+    abuffer4 = avfilter_get_by_name("abuffer");
+    if (!abuffer4) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the abuffer filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+	
+	/* buffer audio source: the decoded frames from the decoder will be inserted here. */
+#if 1
+    snprintf(args, sizeof(args),
+			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
+             sample_rate4,
+             av_get_sample_fmt_name(sample_fmt4),
+			 channel_layout4);
+#else
+	// sample_rate=48000:sample_fmt=s16:channel_layout=0x3
+    snprintf(args, sizeof(args),
+			 "sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
+			dec_ctx2->sample_rate,
+			av_get_sample_fmt_name(dec_ctx2->sample_fmt),
+			av_get_default_channel_layout(dec_ctx2->channels));
+#endif
+
+    av_log(NULL, AV_LOG_INFO, "src3 input format:%s", args);
+	err = avfilter_graph_create_filter(&abuffer4_ctx, abuffer4, "src4",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
+        return err;
+    }
+
+    /****** volume src 4 ******* */
+    /* Create volume filter. */
+    volume4 = avfilter_get_by_name("volume");
+    if (!volume4) {
+        av_log(NULL, AV_LOG_ERROR, "Could not find the volume filter.\n");
+        return AVERROR_FILTER_NOT_FOUND;
+    }
+    
+    snprintf(args, sizeof(args), "volume=1");
+	err = avfilter_graph_create_filter(&volume4_ctx, volume4, "volume4",
+                                       args, NULL, filter_graph);
+    if (err < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
+        return err;
+    }
+
+
+
 	
     /****** amix ******* */
     /* Create mix filter. */
@@ -425,7 +600,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
         return AVERROR_FILTER_NOT_FOUND;
     }
     
-    snprintf(args, sizeof(args), "inputs=3");
+    snprintf(args, sizeof(args), "inputs=5");
 	
 	err = avfilter_graph_create_filter(&mix_ctx, mix_filter, "amix",
                                        args, NULL, filter_graph);
@@ -445,7 +620,7 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     //snprintf(args, sizeof(args), "volume=0.2");
     snprintf(args, sizeof(args), "volume=1");
 	
-	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume3",
+	err = avfilter_graph_create_filter(&volume_sink_ctx, volume_sink, "volume6",
                                        args, NULL, filter_graph);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create audio volume filter\n");
@@ -493,16 +668,30 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
 		err = avfilter_link(abuffer1_ctx, 0, volume1_ctx, 0);
 	if(err>=0)
         err = avfilter_link(volume1_ctx, 0, mix_ctx, 1);
+
 	if (err >= 0)
 		err = avfilter_link(abuffer2_ctx, 0, volume2_ctx, 0);
 	if(err>=0)
         err = avfilter_link(volume2_ctx, 0, mix_ctx, 2);
+
+
+	if (err >= 0)
+		err = avfilter_link(abuffer3_ctx, 0, volume3_ctx, 0);
+	if(err>=0)
+        err = avfilter_link(volume3_ctx, 0, mix_ctx, 3);
+
+	if (err >= 0)
+		err = avfilter_link(abuffer4_ctx, 0, volume4_ctx, 0);
+	if(err>=0)
+        err = avfilter_link(volume4_ctx, 0, mix_ctx, 4);
+
 	if (err >= 0)
         err = avfilter_link(mix_ctx, 0, volume_sink_ctx, 0);
 	if (err >= 0)
         err = avfilter_link(volume_sink_ctx, 0, abuffersink_ctx, 0);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Error connecting filters\n");
+		assert(1);
         return err;
     }
 	
@@ -521,6 +710,8 @@ static int init_filter_graph(AVFilterGraph **graph, AVFilterContext **src0,
     *src0   = abuffer0_ctx;
 	*src1   = abuffer1_ctx;
 	*src2   = abuffer2_ctx;
+	*src3   = abuffer3_ctx;
+	*src4   = abuffer4_ctx;
     *sink  = abuffersink_ctx;
     
     return 0;
@@ -809,6 +1000,7 @@ static int write_output_file_trailer(AVFormatContext *output_format_context)
     return 0;
 }
 
+#if 0
 void *recv_proc1(void *param)
 {
 	int ret;
@@ -1082,6 +1274,7 @@ end:
 		av_freep(&dst_data[0]);
 	av_freep(&dst_data);
 }
+#endif
 
 
 /** Initialize one data packet for reading or writing. */
@@ -1223,7 +1416,153 @@ static int interruptcb(void *ctx) {
 	return 0;
 }
 
+// 音频静音数据
+static char audio_data[1024*4]={0};
 
+// 如果某路音频源不存在，就想音频中防止静音数据
+// 没21ms放置一次
+Uint32 audio_not_exist_cb()
+{
+	//int size = 1024*4;
+	int size = 1024;
+	void *data[1];
+	data[0] = (void*)audio_data;
+	if(audio0_exist == 0  && av_audio_fifo_size(fifo1) <= 1024*8)
+	{
+		printf("======================xxxxxxxxxxxxxxxxxxxxxxxxxx %d\n", __LINE__);
+		pthread_mutex_lock(&counter_mutex1);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo1, (void **)data, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo1));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex1);
+
+
+	}
+
+	if(audio1_exist == 0  && av_audio_fifo_size(fifo2) <= 1024*8)
+	{
+		printf("======================xxxxxxxxxxxxxxxxxxxxxxxxxx %d\n", __LINE__);
+		pthread_mutex_lock(&counter_mutex2);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo2, (void **)data, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo2));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex2);
+	
+	}
+
+	if(audio2_exist == 0  && av_audio_fifo_size(fifo3) <= 1024*8)
+	{
+		printf("======================xxxxxxxxxxxxxxxxxxxxxxxxxx %d\n", __LINE__);
+		// usb的还需要更改写入值
+		pthread_mutex_lock(&counter_mutex3);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo3, (void **)data, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo3));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex3);
+
+	}
+
+	if(audio3_exist == 0  && av_audio_fifo_size(fifo4) <= 1024*8)
+	{
+		//printf("======================xxxxxxxxxxxxxxxxxxxxxxxxxx %d\n", __LINE__);
+		pthread_mutex_lock(&counter_mutex4);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo4, (void **)data, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo4));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex4);
+	}
+
+	if(audio4_exist == 0 && av_audio_fifo_size(fifo5) <= 1024*8)
+	{
+		//printf("======================xxxxxxxxxxxxxxxxxxxxxxxxxx %d\n", __LINE__);
+		
+		pthread_mutex_lock(&counter_mutex5);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo5, (void **)data, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo5));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex5);
+	
+	}
+	return AUIDIO_TICK_INTERVAL;
+
+}
+
+int init_5fifo()
+{
+	// 初始化3个输入fifo
+    if (init_fifo_test(&fifo1))
+    //if (init_fifo(&fifo1))
+	{
+		fprintf(stderr, "ERROR TO create fifo1\n");
+		exit(1);
+	}
+
+    if (init_fifo_test(&fifo2))
+    //if (init_fifo(&fifo2))
+	{
+		fprintf(stderr, "ERROR TO create fifo2\n");
+		exit(1);
+	}
+
+    if (init_fifo_test(&fifo3))
+    //if (init_fifo3(&fifo3))
+	{
+		fprintf(stderr, "ERROR TO create fifo3\n");
+		exit(1);
+	}
+
+    if (init_fifo_test(&fifo4))
+	{
+		fprintf(stderr, "ERROR TO create fifo4\n");
+		exit(1);
+	}
+
+    if (init_fifo_test(&fifo5))
+	{
+		fprintf(stderr, "ERROR TO create fifo4\n");
+		exit(1);
+	}
+
+	return 0;
+}
+
+int deinit_5fifo()
+{
+    if (fifo1)
+        av_audio_fifo_free(fifo1);
+    if (fifo2)
+        av_audio_fifo_free(fifo2);
+    if (fifo3)
+        av_audio_fifo_free(fifo3);
+    if (fifo4)
+        av_audio_fifo_free(fifo4);
+    if (fifo5)
+        av_audio_fifo_free(fifo5);
+
+	return 0;
+}
+
+#if 0
 int init_rtsp()
 {
 	int ret;
@@ -1390,28 +1729,6 @@ int init_rtsp()
 			av_log(NULL, AV_LOG_ERROR, "Cannot open audio decoder\n");
 			return ret;
 		}
-	}
-
-	// 初始化3个输入fifo
-    if (init_fifo_test(&fifo1))
-    //if (init_fifo(&fifo1))
-	{
-		fprintf(stderr, "ERROR TO create fifo1\n");
-		exit(1);
-	}
-
-    if (init_fifo_test(&fifo2))
-    //if (init_fifo(&fifo2))
-	{
-		fprintf(stderr, "ERROR TO create fifo2\n");
-		exit(1);
-	}
-
-    if (init_fifo_test(&fifo3))
-    //if (init_fifo3(&fifo3))
-	{
-		fprintf(stderr, "ERROR TO create fifo2\n");
-		exit(1);
 	}
 
 
@@ -1754,14 +2071,12 @@ end:
 
 }
 
-
 int init_audio_capture(const char *in_filename, const char * channel)
 {
 	AVInputFormat *ifmt;
 
 	int ret;
 
-	char errors[1024] = {0};
 
 	ifmt = av_find_input_format("alsa");
 	if(ifmt == NULL) {
@@ -1878,6 +2193,8 @@ int deinit_audio_capture()
 	return 0;
 }
 
+#endif
+
 /** Initialize one audio frame for reading from the input file */
 static int init_input_frame(AVFrame **frame)
 {
@@ -1897,7 +2214,7 @@ void *mix_proc(void *param)
 	int data_present = 0;
 	int finished = 0;
 
-	int nb_inputs = 3;
+	int nb_inputs = 5;
 
 	/*
 	AVFormatContext* input_format_contexts[2];
@@ -1910,28 +2227,38 @@ void *mix_proc(void *param)
 	input_codec_contexts[1] = dec_ctx2;//input_codec_context_1;
 	*/
 
-	AVFilterContext* buffer_contexts[3];
+	AVFilterContext* buffer_contexts[5];
 	buffer_contexts[0] = src0;
 	buffer_contexts[1] = src1;
 	buffer_contexts[2] = src2;
+	buffer_contexts[3] = src3;
+	buffer_contexts[4] = src4;
 	assert(src0);
 	assert(src1);
 	assert(src2);
+	assert(src3);
+	assert(src4);
 
-	int input_finished[3];
+	int input_finished[5];
 	input_finished[0] = 0;
 	input_finished[1] = 0;
 	input_finished[2] = 0;
+	input_finished[3] = 0;
+	input_finished[4] = 0;
 
-	int input_to_read[3];
+	int input_to_read[5];
 	input_to_read[0] = 1;
 	input_to_read[1] = 1;
 	input_to_read[2] = 1;
+	input_to_read[3] = 1;
+	input_to_read[4] = 1;
 
-	int total_samples[3];
+	int total_samples[5];
 	total_samples[0] = 0;
 	total_samples[1] = 0;
 	total_samples[2] = 0;
+	total_samples[3] = 0;
+	total_samples[4] = 0;
 
 	int total_out_samples = 0;
 
@@ -1994,7 +2321,7 @@ void *mix_proc(void *param)
 				//printf("frame_size=%d  av_audio_fifo_size=%d\n", usb_frame_size, av_audio_fifo_size(fifo1));
 				
 				//frame->channel_layout = AV_CH_LAYOUT_MONO;
-				frame->channel_layout = usb_audio_channel_layout;
+				//frame->channel_layout = usb_audio_channel_layout;
 			}
 			else if(i== 1)
 			{
@@ -2004,11 +2331,12 @@ void *mix_proc(void *param)
 				//printf("frame_size=%d  av_audio_fifo_size=%d\n", usb_frame_size, av_audio_fifo_size(fifo2));
 				
 				//frame->channel_layout = AV_CH_LAYOUT_MONO;
-				frame->channel_layout = usb_audio_channel_layout;
+				//frame->channel_layout = usb_audio_channel_layout;
 			}
 			else {
 				// aac 解码后的格式为fltp  直接采集的格式为s16
-				frame->format         = AV_SAMPLE_FMT_FLTP;
+				//frame->format         = AV_SAMPLE_FMT_FLTP;
+				frame->format         = AV_SAMPLE_FMT_S16;
 				frame->sample_rate    = 48000;
 			}
 			frame->nb_samples     = frame_size;
@@ -2070,7 +2398,7 @@ again:
 					//return AVERROR_EXIT;
 				}
 				pthread_mutex_unlock(&counter_mutex2);
-			} else {
+			} else if(i == 2)  {
 				assert(fifo3);
 				assert(frame->data[0]);
 				//printf("=============================> usb audio i=%d\n", i);
@@ -2094,6 +2422,66 @@ again:
 				pthread_mutex_unlock(&counter_mutex3);
 
 			}
+			else if(i == 3)  {
+				assert(fifo4);
+				assert(frame->data[0]);
+				//printf("=============================> usb audio i=%d\n", i);
+				pthread_mutex_lock(&counter_mutex4);
+				if (av_audio_fifo_read(fifo4, (void **)frame->data, frame_size) < frame_size) {
+				//pthread_mutex_unlock(&counter_mutex2);
+#ifdef DEBUG
+					fprintf(stderr, "Could not read data from FIFO, fifo4 file size:%d\n", av_audio_fifo_size(fifo4));
+#endif
+					//av_frame_free(&frame);
+					pthread_mutex_unlock(&counter_mutex4);
+					if(is_start == 0){
+						printf("%d will exit\n", __LINE__);
+						av_frame_free(&frame);
+						goto end;
+					}
+					usleep(20*1000);	
+					goto again;
+					//return AVERROR_EXIT;
+				}
+				pthread_mutex_unlock(&counter_mutex4);
+
+			}
+			else if(i == 4)  {
+				assert(fifo5);
+				assert(frame->data[0]);
+				//printf("=============================> usb audio i=%d\n", i);
+				pthread_mutex_lock(&counter_mutex5);
+				if (av_audio_fifo_read(fifo5, (void **)frame->data, frame_size) < frame_size) {
+				//pthread_mutex_unlock(&counter_mutex2);
+#ifdef DEBUG
+					fprintf(stderr, "Could not read data from FIFO, fifo5 file size:%d\n", av_audio_fifo_size(fifo5));
+#endif
+					//av_frame_free(&frame);
+					pthread_mutex_unlock(&counter_mutex5);
+					if(is_start == 0){
+						printf("%d will exit\n", __LINE__);
+						av_frame_free(&frame);
+						goto end;
+					}
+					usleep(20*1000);	
+					goto again;
+					//return AVERROR_EXIT;
+				}
+				pthread_mutex_unlock(&counter_mutex5);
+
+			}else {
+				printf("WRONG index\n");
+				exit(1);
+			}
+
+
+
+			// 根据选通选择hdmi输出
+			if(audio_sel == i)
+			{
+				audio_play_out(play_hdmi_hd, frame->data, frame_size);
+			}
+
 
 			data_present = 1;
 
@@ -2132,11 +2520,11 @@ again:
 						(double)(total_samples[i] += frame->nb_samples) / input_codec_contexts[i]->sample_rate);
 #endif
 
-#if 1
+#if 0
 				if(i == 2)
 				av_log(NULL, AV_LOG_INFO, "add %d samples on input %d (%d Hz, time=%f, ttime=%f)\n",
-						frame->nb_samples, i, 16000,
-						(double)frame->nb_samples / 16000,
+						frame->nb_samples, i, 48000,
+						(double)frame->nb_samples / 48000,
 						(double)(total_samples[i] += frame->nb_samples) / 16000);
 				else
 				av_log(NULL, AV_LOG_INFO, "add %d samples on input %d (%d Hz, time=%f, ttime=%f)\n",
@@ -2184,7 +2572,7 @@ again:
 				}
 
 #ifdef DEBUG
-#if 1
+#if 0
 				av_log(NULL, AV_LOG_INFO, "remove %d samples from sink (%d Hz, time=%f, ttime=%f)\n",
 						filt_frame->nb_samples, output_codec_context->sample_rate,
 						(double)filt_frame->nb_samples / output_codec_context->sample_rate,
@@ -2207,8 +2595,9 @@ again:
 				assert(48000 == filt_frame->sample_rate);
 				assert(AV_SAMPLE_FMT_S16 == filt_frame->format);
 				assert(AV_CH_LAYOUT_STEREO == filt_frame->channel_layout);
-				*/
-
+				//*/
+#if 0
+				// 老的方式输出
 				AVPacket packet;
 				av_new_packet(&packet, alsa_out_samples*2*2);
 				//assert(packet.size == 1024*2*2);
@@ -2220,6 +2609,16 @@ again:
 				}
 
 				av_free_packet(&packet);
+#else
+				// 通过声卡直接输出
+				audio_play_out(play_35_hd, filt_frame->data, alsa_out_samples);
+				if(audio_sel == 5)
+				{
+					audio_play_out(play_hdmi_hd, filt_frame->data, alsa_out_samples);
+				}
+
+#endif
+
 #endif
 
 				av_frame_unref(filt_frame);
@@ -2253,135 +2652,34 @@ end:
 
 }
 
-int init_swr() {
-	int ret = 0;
-
-	// 需要动态获取audo 1 audio2 格式
-	// audio 1
+// 设置视频丢失通道
+int set_lose(int lose_chn,int value)
+{
+	assert(value == 0 || value == 1);
+	if(lose_chn==0) {
+		audio0_exist = value;
+	}else if(lose_chn==1){
+		audio1_exist = value;
+	}else if(lose_chn==2){
+		audio2_exist = value;
+	}else if(lose_chn==3){
+		audio3_exist = value;
+	}else if(lose_chn==4){
+		audio4_exist = value;
+	}else
 	{
-		int64_t src_ch_layout = AV_CH_LAYOUT_STEREO, dst_ch_layout = AV_CH_LAYOUT_STEREO;
-		int src_rate = 48000, dst_rate = 48000;
-		enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_FLTP, dst_sample_fmt = AV_SAMPLE_FMT_S16;
-		/* create resampler context */
-		swr_ctx1 = swr_alloc();
-		if (!swr_ctx1) {
-			fprintf(stderr, "Could not allocate resampler context\n");
-			ret = AVERROR(ENOMEM);
-			goto end;
-		}
 
-		/* set options */
-		av_opt_set_int(swr_ctx1, "in_channel_layout",    src_ch_layout, 0);
-		av_opt_set_int(swr_ctx1, "in_sample_rate",       src_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx1, "in_sample_fmt", src_sample_fmt, 0);
-
-		av_opt_set_int(swr_ctx1, "out_channel_layout",    dst_ch_layout, 0);
-		av_opt_set_int(swr_ctx1, "out_sample_rate",       dst_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx1, "out_sample_fmt", dst_sample_fmt, 0);
-
-		/* initialize the resampling context */
-		if ((ret = swr_init(swr_ctx1)) < 0) {
-			fprintf(stderr, "Failed to initialize the resampling context\n");
-			ret = -1;
-			goto end;
-		}
 	}
 
-	// audio 2
-	{
-		int64_t src_ch_layout = AV_CH_LAYOUT_STEREO, dst_ch_layout = AV_CH_LAYOUT_STEREO;
-		int src_rate = 48000, dst_rate = 48000;
-		enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_FLTP, dst_sample_fmt = AV_SAMPLE_FMT_S16;
-		/* create resampler context */
-		swr_ctx2 = swr_alloc();
-		if (!swr_ctx2) {
-			fprintf(stderr, "Could not allocate resampler context\n");
-			ret = AVERROR(ENOMEM);
-			ret = -1;
-			goto end;
-		}
-
-		/* set options */
-		av_opt_set_int(swr_ctx2, "in_channel_layout",    src_ch_layout, 0);
-		av_opt_set_int(swr_ctx2, "in_sample_rate",       src_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx2, "in_sample_fmt", src_sample_fmt, 0);
-
-		av_opt_set_int(swr_ctx2, "out_channel_layout",    dst_ch_layout, 0);
-		av_opt_set_int(swr_ctx2, "out_sample_rate",       dst_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx2, "out_sample_fmt", dst_sample_fmt, 0);
-
-		/* initialize the resampling context */
-		if ((ret = swr_init(swr_ctx2)) < 0) {
-			fprintf(stderr, "Failed to initialize the resampling context\n");
-			ret = -1;
-			goto end;
-		}
-	}
-
-	// audio usb
-	{
-		int64_t src_ch_layout = AV_CH_LAYOUT_STEREO, dst_ch_layout = AV_CH_LAYOUT_STEREO;
-		int src_rate = 48000, dst_rate = 48000;
-		enum AVSampleFormat src_sample_fmt = AV_SAMPLE_FMT_S16, dst_sample_fmt = AV_SAMPLE_FMT_S16;
-
-		// 动态获取usb格式输入
-		if(usb_audio_channels == 2)
-			src_ch_layout = AV_CH_LAYOUT_STEREO;
-		else 
-			src_ch_layout = AV_CH_LAYOUT_MONO;
-		src_rate = usb_audio_sample_rate;
-		// src_sample_fmt = AV_SAMPLE_FMT_S16;  // 暂时不支持除S16以外的格式
-
-		/* create resampler context */
-		swr_ctx3 = swr_alloc();
-		if (!swr_ctx3) {
-			fprintf(stderr, "Could not allocate resampler context\n");
-			ret = AVERROR(ENOMEM);
-			ret = -1;
-			goto end;
-		}
-
-		/* set options */
-		av_opt_set_int(swr_ctx3, "in_channel_layout",    src_ch_layout, 0);
-		av_opt_set_int(swr_ctx3, "in_sample_rate",       src_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx3, "in_sample_fmt", src_sample_fmt, 0);
-
-		av_opt_set_int(swr_ctx3, "out_channel_layout",    dst_ch_layout, 0);
-		av_opt_set_int(swr_ctx3, "out_sample_rate",       dst_rate, 0);
-		av_opt_set_sample_fmt(swr_ctx3, "out_sample_fmt", dst_sample_fmt, 0);
-
-		/* initialize the resampling context */
-		if ((ret = swr_init(swr_ctx3)) < 0) {
-			fprintf(stderr, "Failed to initialize the resampling context\n");
-			ret = -1;
-			goto end;
-		}
-	}
-
-	return 0;
-end:
-
-	return -1;
 }
 
-int deinit_swr() {
-	if(swr_ctx1) {
-		swr_free(&swr_ctx1);
-		swr_ctx1 = NULL;
-	}
-
-	if(swr_ctx2) {
-		swr_free(&swr_ctx2);
-		swr_ctx2 = NULL;
-	}
-
-	if(swr_ctx3) {
-		swr_free(&swr_ctx3);
-		swr_ctx3 = NULL;
-	}
-
-	return 0;
+// 设置选通通道 
+int set_sel(int sel)
+{
+	audio_sel = sel;
 }
+
+
 
 /**
  * @brief 设置音量
@@ -2456,6 +2754,75 @@ int set_mix_volume(unsigned char index, const char *volume) {
 	return 0;
 }
 
+// rtsp 接收1
+void audio_recv1(void *buf, unsigned int size, long handle)
+{
+	//printf("audio_recv1 size:%d\n", size);
+
+	if(audio0_exist == 1)
+	{
+		pthread_mutex_lock(&counter_mutex1);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo1, (void **)buf, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo1));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex1);
+	}
+
+}
+
+// rtsp 接收2
+void audio_recv2(void *buf, unsigned int size, long handle)
+{
+	//printf("audio_recv2 size:%d\n", size);
+	if(audio1_exist == 1)
+	{
+		pthread_mutex_lock(&counter_mutex2);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo2, (void **)buf, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo2));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex2);
+	}
+}
+
+// 判断是否有数据源，有数据源将数据放入fifo
+// 没有数据源，不放入
+
+void usb_audio_card_recv(void *buf, unsigned int size, long handle)
+{
+	// printf("usb audio_card_recv size:%d\n", size);
+#if 0
+	FHANDLE hd = (FHANDLE)handle;
+	audio_play_out(hd, buf, size);
+#endif
+	if(audio2_exist == 1)
+	{
+
+		// usb的还需要更改写入值
+		usb_frame_size_trans = size;
+
+		pthread_mutex_lock(&counter_mutex3);
+		//int size = frame_size;
+		if(av_audio_fifo_write(fifo3, (void **)buf, size) < size)
+		{
+			printf("fifo size:%d\n", av_audio_fifo_size(fifo3));
+			fprintf(stderr, "cound not write data to fifo\n");
+			exit(1);
+		}
+		pthread_mutex_unlock(&counter_mutex3);
+
+	}
+
+
+}
+
 #ifndef TEST
 int main_proc(int argc, const char * argv[]);
 // 其他程序引用
@@ -2468,49 +2835,17 @@ int main_proc(int argc, const char * argv[]){
 int main(int argc, const char * argv[]){
 #endif//TEST
 
+	int ret;
 
 	signal(SIGINT, sigterm_handler);
 
-    av_log_set_level(AV_LOG_VERBOSE);
     
-
     int err;
 	
-	av_register_all();
-	avfilter_register_all();
 
-	//show_banner();
-	unsigned version = avcodec_version();
-	printf("version:%d\n", version);
+	ffmpeg_init();
 
-	// 初始化网络库
-	avformat_network_init();
-	av_register_all();
-	avfilter_register_all();
-	avdevice_register_all();
-
-
-#if 0
-	// 指定摄像头参数
-#if 1
-	// arm 
-	const char *in_filename = "hw:1";
-	const char * channel = "2";
-
-	usb_audio_channels = 2;                       // 1
-	usb_audio_sample_rate = 16000;
-	usb_audio_channel_layout = AV_CH_LAYOUT_STEREO;
-#else
-	// x86
-	const char *in_filename = "hw:3";
-	const char * channel = "1";
-	usb_audio_channels = 1;                       // 1
-	usb_audio_sample_rate = 16000;
-	usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
-#endif
-#else
-	// 动态获取摄像头参数
-
+	// 动态获取usb 配置 
 	sound_card_info info;
 	char dev_name[100]= {0};
 	if(0 != found_sound_card(dev_name))
@@ -2525,25 +2860,12 @@ int main(int argc, const char * argv[]){
 		return -1;
 	}
 
-	char channel[100] = {0};
-	usb_audio_channels = info.channels;                       // 1
-	usb_audio_sample_rate = info.sample;
-	printf("=========================> usb_audio_sample_rate = %d\n", usb_audio_sample_rate);
-	if (usb_audio_channels == 1) {
-		usb_audio_channel_layout = AV_CH_LAYOUT_MONO; // AV_CH_LAYOUT_STEREO
-		sprintf(channel, "%d", 1);
-		printf("===========================> AV_CH_LAYOUT_STEREO\n");
-	}
-	else {
-		usb_audio_channel_layout = AV_CH_LAYOUT_STEREO;
-		sprintf(channel, "%d", 2);
-		printf("==========================> AV_CH_LAYOUT_STEREO\n");
-	}
 
-#endif//
+	//初始化fifo
+	init_5fifo();
 
-    init_swr();
-
+#if 0
+	// 删除代码
 	err = init_audio_capture(dev_name, channel);
 	assert(err == 0);
 	ifmt_ctx3 = ifmt_ctx;	
@@ -2553,12 +2875,75 @@ int main(int argc, const char * argv[]){
 	printf("================> before init rtsp\n");
 	init_rtsp();
 	printf("================> after init rtsp\n");
+#endif
+
+
+	// 初始化音频输入
+	char *rtsp_url1 = "rtsp://172.20.2.7/h264/720p";
+	char *rtsp_url2 = "rtsp://172.20.2.7/h264/1080p";
+
+	FHANDLE recv_hdmi_hd1 = NULL;
+	FHANDLE recv_hdmi_hd2 = NULL;
+
+	FHANDLE usb_audio_hd = NULL;
+	ret = audio_recv_create(&recv_hdmi_hd1, rtsp_url1, audio_recv1,  (long)fifo1); 
+	if(ret != 0)
+	{
+		printf("ERROR to create audio recv1\n");
+		exit(1);
+	}
+	ret = audio_recv_create(&recv_hdmi_hd2, rtsp_url2, audio_recv2,  (long)fifo2); 
+	if(ret != 0)
+	{
+		printf("ERROR to create audio recv2\n");
+		exit(1);
+	}
+	ret = audio_card_recv_create(&usb_audio_hd, dev_name, &info, usb_audio_card_recv, (long)fifo3);
+	if(ret != 0)
+	{
+		printf("ERROR to create audio recv3\n");
+		exit(1);
+	}
+
+	is_start = 1;
+
+	// 将前三路设置为1为真实数据
+	audio0_exist = 1;
+	audio1_exist = 1;
+	audio2_exist = 1;
+
+	// 打开声卡
+	int hdmi_type = 0;
+	ret = audio_play_create(&play_hdmi_hd, hdmi_type);
+	if(ret != 0)
+	{
+		printf("ERROR to create audio play\n");
+		exit(1);
+	}
+	printf("==========================>%d %p\n", __LINE__, play_hdmi_hd);
+
+	int _35_type = 1;
+	ret = audio_play_create(&play_35_hd, _35_type);
+	if(ret != 0)
+	{
+		printf("ERROR to create  35 audio play\n");
+		exit(1);
+	}
+	printf("==========================>%d %p\n", __LINE__, play_35_hd);
+
 
 
     /* Set up the filtergraph. */
-    err = init_filter_graph(&graph, &src0, &src1, &src2, &sink);
+    err = init_filter_graph(&graph, &src0, &src1, &src2, &src3, &src4, &sink);
 	printf("Init err = %d\n", err);
 
+	assert(src0!=NULL);
+	assert(src1!=NULL);
+	assert(src2!=NULL);
+	assert(src3!=NULL);
+	assert(src4!=NULL);
+
+#if 0
 	//char* outputFile = "output.wav";
     //remove(outputFile);
 	char* outputFile = "alsa";
@@ -2566,7 +2951,8 @@ int main(int argc, const char * argv[]){
 	av_log(NULL, AV_LOG_INFO, "Output file : %s\n", outputFile);
 
 	printf("====================================================>%d\n",__LINE__);
-	
+
+	// 删除代码
 	// err = open_output_file(outputFile, input_codec_context_0, &output_format_context, &output_codec_context);
 	err = open_output_alsa_file(outputFile, &output_format_context, &output_codec_context);
 	printf("open output file err : %d\n", err);
@@ -2577,15 +2963,23 @@ int main(int argc, const char * argv[]){
 		av_log(NULL, AV_LOG_ERROR, "Error while writing header outputfile\n");
 		exit(1);
 	}
+#endif
+
+	//  添加sdl定时器
+	SDL_TimerID timer = SDL_AddTimer(AUIDIO_TICK_INTERVAL, audio_not_exist_cb, NULL);//创立定时器timer 
 
 while(av_audio_fifo_size(fifo1) <= 0 && av_audio_fifo_size(fifo2) <= 0
 		&& av_audio_fifo_size(fifo3) <= 0
+		&& av_audio_fifo_size(fifo4) <= 0
+		&& av_audio_fifo_size(fifo5) <= 0
 		) {
 		printf("fifo no data\n");
 		usleep(500*1000);
 	}
-	printf("=======================> all fifo have data:%d %d %d\n",
-			av_audio_fifo_size(fifo1), av_audio_fifo_size(fifo2), av_audio_fifo_size(fifo3));
+
+	printf("=======================> all fifo have data:%d %d %d %d %d\n",
+			av_audio_fifo_size(fifo1), av_audio_fifo_size(fifo2), av_audio_fifo_size(fifo3),
+			av_audio_fifo_size(fifo4), av_audio_fifo_size(fifo5));
 
 
 
@@ -2601,41 +2995,47 @@ while(av_audio_fifo_size(fifo1) <= 0 && av_audio_fifo_size(fifo2) <= 0
 	printf("====================================================>%d\n",__LINE__);
 
 #if 0
-	// 正常流程应该调用这个方法关闭
-	// https://ffmpeg.org/doxygen/3.2/group__lavf__encoding.html#ga18b7b10bb5b94c4842de18166bc677cb
-	// Once all the data has been written, the caller must call av_write_trailer() to flush any buffered packets and finalize the output file, then close the IO context (if any) and finally free the muxing context with avformat_free_context()
-	// 需要调用这个方法，要不然可能有些数据没有释放
-    write_output_file_trailer(p_audio_play->output_format_context);
-#endif
-
+	// 删除代码
 	deinit_rtsp();
 
 	printf("==========================>%d\n", __LINE__);
 	deinit_audio_capture();
+#endif
+
+	ret = audio_recv_remove(&recv_hdmi_hd1);
+	if(ret!=0)
+	{
+		printf("error in audio recv remove\n");
+		exit(-1);
+	}
+
+	ret = audio_recv_remove(&recv_hdmi_hd2);
+	if(ret!=0)
+	{
+		printf("error in audio recv remove\n");
+		exit(-1);
+	}
+
+	ret = audio_card_recv_remove(&usb_audio_hd);
+	if(ret!=0)
+	{
+		printf("error in audio card recv remove\n");
+		exit(-1);
+	}
 
 	printf("==========================>%d\n", __LINE__);
 	avfilter_graph_free(&graph);
 
 	printf("==========================>%d\n", __LINE__);
 
-    deinit_swr();
+	// 删除sdl定时器
+	SDL_RemoveTimer(timer);
 
-    if (fifo1)
-        av_audio_fifo_free(fifo1);
-    if (fifo2)
-        av_audio_fifo_free(fifo2);
-    if (fifo3)
-        av_audio_fifo_free(fifo3);
-
+	deinit_5fifo();
 	printf("==========================>%d\n", __LINE__);
 
-    //if (output_codec_context)
-        //avcodec_free_context(&output_codec_context);
-    if (output_format_context) {
-        //avio_closep(&output_format_context->pb);
-        //avformat_free_context(output_format_context);
-    }
-
+	audio_play_remove(&play_hdmi_hd);
+	audio_play_remove(&play_35_hd);
 	printf("==========================>%d\n", __LINE__);
 
 	return 0;

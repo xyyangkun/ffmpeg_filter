@@ -27,6 +27,10 @@ void* multi_audio_mix_proc(void *arg);
 int set_mix_volume(unsigned char index, const char *volume);
 void set_mix_exit();
 
+int set_sel(int sel);
+
+int set_lose(int lose_chn,int value);
+
 
 #ifdef __cplusplus
 #if __cplusplus

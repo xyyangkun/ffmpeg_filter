@@ -35,6 +35,8 @@
 
 #define TICK_INTERVAL    30
 
+#define TICK_INTERVAL1    10
+
 
 Uint32 TimeLeft(void)
 {
@@ -79,7 +81,19 @@ Uint32 callback(Uint32 interval, void *param)//回调函数
 	return TICK_INTERVAL;
 }
 
+static int count1 = 0;
+Uint32 callback1(Uint32 interval, void *param)//回调函数 
+{
+	count1++;
+	printf("=============> count1:%d\n", count1);
+	usleep(3);
+
+	return TICK_INTERVAL1;
+}
+
+
 // 测试定时器回调
+// 添加两路定时器
 
 int main() 
 {
@@ -92,9 +106,11 @@ int main()
 
 	//
 	SDL_TimerID timer = SDL_AddTimer(TICK_INTERVAL, callback, NULL);//创立定时器timer 
+	SDL_TimerID timer1 = SDL_AddTimer(TICK_INTERVAL1, callback1, NULL);//创立定时器timer 
 
 	sleep(2);
 	SDL_RemoveTimer(timer);
+	SDL_RemoveTimer(timer1);
 	printf("count=%d\n", count);
 
 	printf("will over\n");

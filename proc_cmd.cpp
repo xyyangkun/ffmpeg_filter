@@ -97,6 +97,14 @@ int proc_cmd::init()
 		printf("ERROR to create socket:%d=>%s\n", errno, strerror(errno));
 		exit(-1);
 	}
+	
+	struct timeval timeout;
+	timeout.tv_sec = 0;//秒
+	timeout.tv_usec = 100000;//微秒  100ms
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
+		perror("setsockopt failed:");
+		exit(1);
+	}
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -240,6 +248,7 @@ int proc_cmd::close()
 	}
 
 	this->sock = -1;
+	return 0;
 }
 
 
@@ -254,7 +263,7 @@ int proc_cmd::recv_cmd()
 	// 1. 阻塞接收命令,并校验命令
 	/* 接收数据头 */
 	ret = read(sock, (void *)data_head.data(), sizeof(t_recv_data));
-	if(ret != sizeof(t_recv_data))
+	if(ret != sizeof(t_recv_data) 
 	{
 		proc_err("error to read data head:%d--%s\n", errno, strerror(errno));
 		// todo send data
