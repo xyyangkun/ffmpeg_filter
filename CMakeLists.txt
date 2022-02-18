@@ -178,7 +178,8 @@ endif()
 #list(REMOVE_ITEM TEST_SRC ./sound_card_get.c ./sound_card_get_test.c)
 list(REMOVE_ITEM TEST_SRC_LIST ./sound_card_get.c ./sound_card_get_test.c ./multi_audio_mix.c ./multi_audio_mix_48kin.c ./proc_cmd.cpp  ./t_proc_cmd.cpp ./proc_mix_cmd.cpp ./test_demux.c ./demux.c 
 								./test_demux_audio_player.c ./test_sdl_timer.c ./test_demux_av_player.c ./audio_recv.c ./five_audio_mix_48kin.c ./audio_play.c ./audio_card_recv.c
-								./test_audio_recv_play.c ./test_wav_play.c ./wavreader.c)
+								./test_audio_recv_play.c ./test_wav_play.c ./wavreader.c
+								./test_hdmi_audio_recv_play.c ./hdmi_audio_card_recv.c ./hdmi_audio_recv.h)
 
 foreach(TEST_SRC ${TEST_SRC_LIST})
     STRING(REGEX REPLACE "^\\./|\\.c[a-zA-Z0-9_]*$" "" TEST_EXE_NAME ${TEST_SRC})
@@ -242,6 +243,11 @@ target_link_libraries(test_demux ${LINK_LIB_LIST})
 file(GLOB test_audio_recv_play_list test_audio_recv_play.c audio_recv.c audio_play.c audio_card_recv.c sound_card_get.c)
 add_executable(test_audio_recv_play ${test_audio_recv_play_list})  
 target_link_libraries(test_audio_recv_play ${LINK_LIB_LIST})
+
+
+file(GLOB test_hdmi_audio_recv_play_list test_hdmi_audio_recv_play.c hdmi_audio_card_recv.c audio_play.c audio_card_recv.c sound_card_get.c audio_recv.c)
+add_executable(test_hdmi_audio_recv_play ${test_hdmi_audio_recv_play_list})  
+target_link_libraries(test_hdmi_audio_recv_play ${LINK_LIB_LIST})
 
 file(GLOB test_wav_play_list test_wav_play.c audio_recv.c audio_play.c audio_card_recv.c sound_card_get.c wavreader.c)
 add_executable(test_wav_play ${test_wav_play_list})  
