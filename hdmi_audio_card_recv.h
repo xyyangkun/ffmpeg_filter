@@ -23,8 +23,8 @@
 * \version 1.0
 * \date 2022.2.18
 */
-#ifndef _AUDIO_CARD_RECV_H_
-#define _AUDIO_CARD_RECV_H_
+#ifndef _HDMI_AUDIO_CARD_RECV_H_
+#define _HDMI_AUDIO_CARD_RECV_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,4 +76,4 @@ int hdmi_audio_card_recv_remove(FHANDLE *hd);
 #endif
 #endif /* End of #ifdef __cplusplus */
 
-#endif//_AUDIO_CARD_RECV_H_
+#endif//_HDMI_AUDIO_CARD_RECV_H_

@@ -47,4 +47,6 @@ int get_sound_card_info(const char *name, sound_card_info *info);
  */
 int found_sound_card(char *name);
 
+int found_sound_card1(char *_name, char *name);
+
 #endif//_AUDIO_CARD_H_

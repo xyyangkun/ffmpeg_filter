@@ -216,9 +216,30 @@ int  test_mute_card_play()
 	assert(ret == 0);
 }
 
+// 从声卡名字获取声卡序号
+int  test_card_name()
+{
+	char *names[] = {"rockchip_hdmi", "rockchip_rk809", "rockchipdummyco", "rockchipdummy_1"};
+	printf("sizeof names:%d\n", sizeof(names));
+	for(int i=0; i<sizeof(names)/sizeof(char *); i++)
+	{
+		char dev_name[100]= {0};
+		if(0 != found_sound_card1(names[i], dev_name))
+		{
+			printf("not found sound card\n");
+			return -1;
+		}
+		printf("name %d=%s\n", i, dev_name);
+	}
+
+
+	return 0;
+}
+
 int main()
 {
 	//test_rtsp_recv_card_play();
 	//test_card_recv_card_play();
-	test_mute_card_play();
+	//test_mute_card_play();
+	test_card_name();
 }
