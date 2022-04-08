@@ -204,8 +204,8 @@ int audio_play_create(FHANDLE *hd,const int  type)
 
     // tell format context to use ALSA as ouput device
     fmt_ctx->oformat = fmt;
-	static char *hdmi_str = "hw:0";
-	static char *_35_str = "hw:1";
+	static char *hdmi_str = "hw:3";
+	static char *_35_str = "hw:0";
 
 	// url 是内部变量，内部释放调用av_free
 	// 本来应该通过avformat_write_header 的options方法传入，

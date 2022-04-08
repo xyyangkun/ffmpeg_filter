@@ -169,7 +169,15 @@ static void *audio_card_recv_proc(void *param)
 		// usb camera接收数据帧大小固定的
 		ret = av_read_frame(p_audio_card_recv->ifmt_ctx, &pkt);
 		if(ret < 0) {
-			printf("error to read frame\n");
+			printf("11error to read frame:%d %d, %d, sound_card_is_start=%d\n",
+					ret, errno, EAGAIN, p_audio_card_recv->sound_card_is_start);
+			perror("read:");
+			//if(errno == EAGAIN)
+			if(ret == -EAGAIN)
+			{
+				usleep(20000);
+				continue;
+			}
 			break;
 		}
 
@@ -373,6 +381,8 @@ int audio_card_recv_create(FHANDLE *hd, const char *name, sound_card_info *info,
 	av_dict_set_int(&options, "sample_rate", p_audio_card_recv->audio_sample_rate, 0);
 
 	//av_dict_set(&options, "thread_queue_size", "1024", 0);
+	
+	ifmt_ctx->flags |= AVFMT_FLAG_NONBLOCK;
 
 	if(avformat_open_input(&ifmt_ctx, name, ifmt, &options)!=0){  
 		perror("Couldn't open input audio stream.\n");  

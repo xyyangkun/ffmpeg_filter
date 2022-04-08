@@ -18,6 +18,36 @@
 #include "audio_play.h"
 #include "audio_card_recv.h"
 
+#include "libavcodec/avcodec.h"
+#include <libavformat/avformat.h>
+#include "libavformat/avio.h"
+
+#include "libavutil/channel_layout.h"
+#include "libavutil/md5.h"
+#include "libavutil/opt.h"
+#include "libavutil/samplefmt.h"
+#include "libavutil/audio_fifo.h"
+#include "libavutil/avassert.h"
+#include "libavutil/avstring.h"
+#include "libavutil/frame.h"
+#include "libavutil/opt.h"
+
+#include "libavfilter/avfilter.h"
+#include "libavfilter/buffersink.h"
+#include "libavfilter/buffersrc.h"
+//#include <libavfilter/avfiltergraph.h>
+
+#include "libavformat/avformat.h"
+#include "libavutil/mathematics.h"
+#include "libavutil/time.h"
+#include <libavformat/avformat.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/time.h>
+
+#include "libavdevice/avdevice.h"
+
+
+
 int is_start = 0;
 int usb_is_start = 0;
 void set_mix_exit() {
@@ -135,6 +165,8 @@ int  test_card_recv_card_play()
 
 	ffmpeg_init();
 
+	av_log_set_level(AV_LOG_TRACE);
+    //av_log_set_level(AV_LOG_VERBOSE);
 	signal(SIGINT, sigterm_handler);
 
 	is_start = 1;
@@ -149,7 +181,7 @@ int  test_card_recv_card_play()
 	// 动态获取摄像头声卡参数
 	sound_card_info info;
 	char dev_name[100]= {0};
-	if(0 != found_sound_card(dev_name))
+	if(0 != found_sound_card1("rockchipdummyco", dev_name))
 	{
 		printf("not found sound card\n");
 		return -1;
@@ -239,7 +271,7 @@ int  test_card_name()
 int main()
 {
 	//test_rtsp_recv_card_play();
-	//test_card_recv_card_play();
+	test_card_recv_card_play();
 	//test_mute_card_play();
-	test_card_name();
+	//test_card_name();
 }
