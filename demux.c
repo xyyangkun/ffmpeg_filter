@@ -369,6 +369,12 @@ int open_local_file(char *filename, local_av_callback _cb, local_av_close_callba
 		fprintf(stderr, "Could not open source file %s\n", src_filename);
 		return -1;
 	}
+
+	printf("===============================================\n");
+	/* dump input information to stderr */
+	av_dump_format(fmt_ctx, 0, src_filename, 0);
+	printf("===============================================\n");
+
 	/* retrieve stream information */
 	if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
 		fprintf(stderr, "Could not find stream information\n");
@@ -393,8 +399,6 @@ int open_local_file(char *filename, local_av_callback _cb, local_av_close_callba
 		printf("channe:%d sfmt:%d\n", n_channels, sfmt);
 	}
 
-	/* dump input information to stderr */
-	av_dump_format(fmt_ctx, 0, src_filename, 0);
 
 
 	if (!audio_stream && !video_stream) {
