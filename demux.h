@@ -106,6 +106,19 @@ int set_local_file_cb_v1(local_av_callback_v1 _audio_cb, local_av_callback_v1 _v
 int close_local_file();
 
 
+/**
+ * @brief 获取mp4支持格式
+ *   // http://kevinnan.org.cn/index.php/archives/571/
+ * @param[in] path mp4 路径
+ * @param[out] video_type 0 没有视频，或者不支持;1 h264; 2 h265;
+ * @param[out] audio_type 0 没有音频，获取不支持;1 aac
+ * @param[out] duration 视频时长单位秒
+ * @return 0 success, other failed
+ */
+int mp4_get_info(char *path, int *video_type, int *audio_type, int *duration);
+
+
+
 #ifdef __cplusplus
 #if __cplusplus
 }

@@ -16,7 +16,7 @@ else()
 endif()
 
 #add debug operation
-#set(ENABLE_ASAN true)
+set(ENABLE_ASAN true)
 
 if(ENABLE_ASAN)
 # 以下问内存泄漏检测

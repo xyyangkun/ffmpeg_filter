@@ -489,5 +489,110 @@ int close_local_file() {
 	av_bitstream_filter_close(h264bsfc);
 }
 
+int mp4_get_info(char *path, int *video_type, int *audio_type, int *duration)
+{
+	int result;
+	AVFormatContext *fmt_ctx = NULL;
+	av_log_set_level(AV_LOG_INFO);
+	av_register_all();
+
+	result = avformat_open_input(&fmt_ctx, path, NULL, NULL);
+	if(result < 0){
+		av_log(NULL,AV_LOG_ERROR,"can't open file : %s \n",av_err2str(result));
+		return -1;
+	}
+
+	/* retrieve stream information */
+	if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+		fprintf(stderr, "Could not find stream information\n");
+		return -2;
+	}
+
+    //计算视频长度
+    int hours, mins, secs;
+    secs = fmt_ctx->duration / 1000000;
+    mins = secs / 60;
+    secs %= 60;
+    hours = mins / 60;
+    mins %= 60;
+
+	// 赋值时长
+	*duration = fmt_ctx->duration / 1000000;
+
+	*audio_type = 0;
+	*video_type = 0;
+
+    //格式化视频长度
+    char duration_foramt_[128];
+    sprintf(duration_foramt_, "%d:%d:%d", hours, mins, secs);
+	printf("duration :%s\n", duration_foramt_);
+
+	// 流数量
+	printf("stream num:%d\n", fmt_ctx->nb_streams);
+
+	//av_dump_format(fmt_ctx, 0, "./test.mp4", 0);
+
+	printf("h264 type:%d h265 type:%d aac type:%d \n", 
+			AV_CODEC_ID_H264, 
+			AV_CODEC_ID_HEVC,
+			AV_CODEC_ID_AAC);
+
+	// 遍历流
+	for(int i =0; i<fmt_ctx->nb_streams; i++)
+	{
+		//取出一路流,并生成AVStream对象
+		AVStream* input_stream = fmt_ctx->streams[i];
+		//判断是否为视频流
+		if(input_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+
+			//avg_frame_rate -> AVRational(有理数),
+			//avg_frame_rate.num : 分子
+			//avg_frame_rate.den : 母
+			//得到视频帧率
+			int frame_rate_ = input_stream->avg_frame_rate.num / input_stream->avg_frame_rate.den;
+			
+			//取出视频流中的编码参数部分, 生成AVCodecParamters对象
+            AVCodecParameters* codec_par = input_stream->codecpar;
+
+            //利用编码参数对象AVCdecParamters得到视频宽度，高度，码率，视频大小
+            int width_ = codec_par->width;
+            int height_ = codec_par->height;
+            int video_average_bit_rate_ = codec_par->bit_rate/1000;
+            //int video_size_ = this->video_average_bit_rate_ * secs / (8.0*1024);
+			int code_id = codec_par->codec_id;
+			
+			printf("video w:%d h:%d rate:%d code_id:%d\n", 
+				width_, height_, video_average_bit_rate_, code_id);
+			printf("code name:%s\n", avcodec_get_name(codec_par->codec_id));
+			if(codec_par->codec_id==AV_CODEC_ID_H264)
+				*video_type = 1;
+			if(codec_par->codec_id==AV_CODEC_ID_HEVC)
+				*video_type = 2;
+		}
+		else if(input_stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			//生成AVcodecParamters对象
+            AVCodecParameters* codec_par = input_stream->codecpar;
+			
+			int audio_average_bit_rate_ = codec_par->bit_rate / 1000;
+            int channel_nums = codec_par->channels;
+            int sample_rate_ = codec_par->sample_rate;
+			printf("audio bit rate:%d, channel_nums:%d sample_rate:%d, code_id:%s\n",
+				audio_average_bit_rate_, channel_nums, sample_rate_,
+				avcodec_get_name(codec_par->codec_id));	
+
+			if(codec_par->codec_id==AV_CODEC_ID_AAC)
+				*audio_type = 1;
+		}
+
+	}
+
+
+	avformat_close_input(&fmt_ctx);
+
+	return 0;
+}
+
+
 
 
