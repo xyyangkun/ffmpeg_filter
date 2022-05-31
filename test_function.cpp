@@ -15,6 +15,8 @@
  *        Company:  yangkun.com
  *
  *****************************************************************************/
+#include <iostream>
+#include <memory>
 
 #include "SDL2/SDL.h"
 #include <stdio.h>
@@ -59,11 +61,8 @@ int timer_stop()
 }
 
 
-int main()
+void test_timer()
 {
-	is_start = 1;
-	signal(SIGINT, sigterm_handler);
-
 	timer_start();
 
 	while(is_start){
@@ -71,4 +70,84 @@ int main()
 	}
 
 	timer_stop();
+}
+
+
+#define TICK_INTERVAL    30
+Uint32 TimeLeft(void)
+{
+	static Uint32 next_time = 0;
+	Uint32 now;
+
+	now = SDL_GetTicks();
+	printf("    now=%d next_time=%d\n", now, next_time);
+	if ( next_time <= now ) {
+		//next_time = now+TICK_INTERVAL;
+		next_time = next_time + TICK_INTERVAL;
+		return(0);
+	}
+	return (next_time-now);
+}
+
+
+
+static Uint32 _now = 0;
+void TimeLeft0()
+{
+	_now = SDL_GetTicks();
+}
+
+Uint32 TimeLeft1(Uint32 now)
+{
+	static Uint32 next_time = 0;
+	static Uint32 next_time1 = 30;
+	//Uint32 now;
+
+	now = SDL_GetTicks();
+	printf("    now=%d next_time=%d\n", now, next_time);
+	if ( next_time <= now ) {
+		// 下一时间应该是在上一次的基础上得到的
+		next_time = next_time + TICK_INTERVAL;
+		return(0);
+	}
+	return (next_time-_now);
+}
+
+void test_timeleft()
+{
+
+	TimeLeft();
+
+
+	Uint32 left;
+
+	int count = 50;
+	//int count = 5000;
+
+	while(count--){
+		printf("count:%d time left:%d,   ticks:%d\n", count, left, SDL_GetTicks());
+		usleep(10*1000);	
+
+		//SDL_Delay(10);
+		left = TimeLeft();
+		SDL_Delay(left);
+		TimeLeft();
+	}
+}
+
+
+
+int main()
+{
+	is_start = 1;
+	signal(SIGINT, sigterm_handler);
+
+
+	//test_timer();
+	test_timeleft();
+
+	while(is_start){
+		sleep(1);
+	}
+
 }

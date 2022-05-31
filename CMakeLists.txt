@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 #set(CMAKE_BUILD_TYPE "Debug")
+set (CMAKE_BUILD_TYPE "Release")
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Release")
     message(STATUS "Release版本")
@@ -13,10 +14,9 @@ if(${CMAKE_BUILD_TYPE} MATCHES "Release")
 else()
     set(BuildType "Debug")
     message(STATUS "Debug版本")
+	#add debug operation
+	set(ENABLE_ASAN true)
 endif()
-
-#add debug operation
-set(ENABLE_ASAN true)
 
 if(ENABLE_ASAN)
 # 以下问内存泄漏检测
