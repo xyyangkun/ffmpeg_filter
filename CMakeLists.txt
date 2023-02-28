@@ -266,3 +266,9 @@ target_link_libraries(test_demux_av_player ${LINK_LIB_LIST})
 file(GLOB test_sdl_timer_list test_sdl_timer.c)
 add_executable(test_sdl_timer ${test_sdl_timer_list})  
 target_link_libraries(test_sdl_timer ${LINK_LIB_LIST})
+
+
+# alsa读取音频，v4l2读取视频，并且使用ffmpeg编码，推流
+file(GLOB av_read_enc_list av_read_enc.c)
+add_executable(test_av_read_enc ${av_read_enc_list})  
+target_link_libraries(test_av_read_enc ${LINK_LIB_LIST})
