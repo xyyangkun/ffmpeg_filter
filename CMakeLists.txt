@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 #加载自定义模块
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-#set(CMAKE_BUILD_TYPE "Debug")
-set (CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
+#set (CMAKE_BUILD_TYPE "Release")
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Release")
     message(STATUS "Release版本")
@@ -24,7 +24,7 @@ add_compile_options(-g)
 add_compile_options(-fsanitize=address)
 add_compile_options(-fno-omit-frame-pointer)
 add_compile_options(-Wl,--no-undefined)
-#add_compile_options(-O1)
+add_compile_options(-O0)
 #添加链接选项, 只能添加一行
 SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address")
 endif()
@@ -59,7 +59,7 @@ message(STATUS "arm corss compile")
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DARM")
 
 ELSE()
-set(LINK_LIB_LIST m pthread asound swresample)
+set(LINK_LIB_LIST m pthread asound swresample swscale asound avformat avdevice avcodec avfilter swresample avutil )
 message(STATUS "x86 compile")
 ENDIF(CROSS_COMPILE)
 
@@ -272,3 +272,6 @@ target_link_libraries(test_sdl_timer ${LINK_LIB_LIST})
 file(GLOB av_read_enc_list av_read_enc.c)
 add_executable(test_av_read_enc ${av_read_enc_list})  
 target_link_libraries(test_av_read_enc ${LINK_LIB_LIST})
+
+
+add_subdirectory(test_ffmpeg)
